@@ -12,7 +12,6 @@ For that, it relies on [`chrome.debugger`](https://developer.chrome.com/docs/ext
 
 A small demo of Playwright CRX recorder and player in action:
 
-![Playwright CRX Recorder / Player](./docs/assets/recorder-player.gif)
 
 It provides playwright recorder (the same used in `playwright codegen`) bundled as a chrome extension, with no other dependencies.
 This way, with your normal chrome / chromium / edge browser, you can record playwright scripts in your prefered language.
