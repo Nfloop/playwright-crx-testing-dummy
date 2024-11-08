@@ -1,0 +1,5616 @@
+playwright-crx-testing-dummy/
+    tsconfig.node.json
+    Content:
+    ```
+File: tsconfig.node.json
+
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+  },
+  "include": ["../recorder/vite.config.ts"]
+}
+    ```
+
+    .DS_Store
+    Error reading file: 'utf-8' codec can't decode byte 0xad in position 1062: invalid start byte
+
+    test.d.ts
+    Content:
+    ```
+File: test.d.ts
+
+export * from './index';
+export { expect, Expect } from './src/types/test';
+    ```
+
+    .editorconfig
+    Content:
+    ```
+File: .editorconfig
+
+root = true
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+    ```
+
+    README.md
+    Content:
+    ```
+File: README.md
+
+This package contains the [Chrome Extensions](https://developer.chrome.com/docs/extensions/) flavor of the [Playwright](http://github.com/microsoft/playwright) library.
+For that, it relies on [`chrome.debugger`](https://developer.chrome.com/docs/extensions/reference/debugger/) to implement [playwright's `ConnectionTransport`](https://github.com/microsoft/playwright/blob/f8a30fb726bc35d4058a2d010b2ed5f6ca2409a3/packages/playwright-core/src/server/transport.ts#L54) interface.
+A small demo of Playwright CRX recorder and player in action:
+It provides playwright recorder (the same used in `playwright codegen`) bundled as a chrome extension, with no other dependencies.
+This way, with your normal chrome / chromium / edge browser, you can record playwright scripts in your prefered language.
+In terms of chrome extension functionality, it provides:
+- [action button](https://developer.chrome.com/docs/extensions/reference/action/) for attaching current tab into recorder (it opens the recorder if it's closed)
+- [context menu](https://developer.chrome.com/docs/extensions/reference/contextMenus/) for the same purpose
+- [side panel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) to display the recorder by default (it can be disabled in the options, falling back to a popup window)
+- [command shortcuts](https://developer.chrome.com/docs/extensions/reference/api/commands):
+  - `Alt + Shift + R` starts recording
+  - `Alt + Shift + C` starts inspecting
+- [options page](https://developer.chrome.com/docs/extensions/develop/ui/options-page) to configure:
+  - **Default language** (defaults to **Node Library**)
+  - **TestID Attribute Name** (defaults to `data-testid`)
+  - **Open in Side Panel** (defaults to `true`, and falls back to a popup window if set to `false`) 
+- pages must be explicitly attached to be recordable, except if they are opened from already attached pages
+- closing the recorder window will detach all pages and uninstall injected scripts (highlights and event listeners)
+- a player that will run the recorded instructions, in any supported language*
+   - it actually doesn't run Java, Python or C#, but it uses an internal JSONL format to know which instructions it needs to run and how to map them into the current selected code. This way, it can highlight the lines being executed.
+It's possible to use `playwright-crx` as a library to create new chrome extensions.
+Here's a simple example of a background service worker for a chrome extension using **playwright-crx**:
+```ts
+import { crx, expect } from 'playwright-crx/test';
+chrome.action.onClicked.addListener(async ({ id: tabId }) => {
+  const crxApp = await crx.start({ slowMo: 500 });
+  try {
+    const page = await crxApp.attach(tabId!).catch(() => crxApp.newPage());
+    await page.goto('https://demo.playwright.dev/todomvc/#/');
+    await page.getByPlaceholder('What needs to be done?').click();
+    await page.getByPlaceholder('What needs to be done?').fill('Hello World!');
+    await page.getByPlaceholder('What needs to be done?').press('Enter');
+    await expect(page.getByTestId('todo-title')).toHaveText('Hello World!');
+  } finally {
+    await crxApp.detach(page);
+    await crxApp.close();
+  }
+});
+```
+A more complete example can be found in `examples/todomvc-crx`.
+To build `playwright-crx`:
+```bash
+npm ci
+npm run build
+```
+Playwright is nested as a git subtree.
+To update it, just run the following command (replace `v1.48.0` with the desired release tag):
+```bash
+git subtree pull --prefix=playwright git@github.com:microsoft/playwright.git v1.48.0 --squash
+```
+    ```
+
+    .gitignore
+    Content:
+    ```
+File: .gitignore
+
+node_modules/
+lib/
+    ```
+
+    package.json
+    Content:
+    ```
+File: package.json
+
+{
+  "name": "playwright-crx",
+  "version": "0.10.0",
+  "engines": {
+    "node": ">=16"
+  },
+  "author": {
+    "name": "Rui Figueira"
+  },
+  "license": "Apache-2.0",
+  "scripts": {
+    "ci:pw:core-utils-bundle": "npm ci --prefix ./playwright/packages/playwright-core/bundles/utils",
+    "ci:pw:core-zip-bundle": "npm ci --prefix ./playwright/packages/playwright-core/bundles/zip",
+    "ci:pw:test-babel-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/babel",
+    "ci:pw:test-expect-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/expect",
+    "ci:pw:test-utils-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/utils",
+    "ci:pw:bundles": "npm run ci:pw:core-utils-bundle && npm run ci:pw:core-zip-bundle && npm run ci:pw:test-babel-bundle && npm run ci:pw:test-expect-bundle && npm run ci:pw:test-utils-bundle",
+    "clean:pw:bundles": "rimraf -g ./playwright/packages/playwright-core/bundles/**/node_modules && rimraf -g ./playwright/packages/playwright/bundles/**/node_modules",
+    "clean:pw": "npm run clean:pw:bundles && cd ./playwright && npm run clean",
+    "generate:pw": "cd ./playwright && node ./utils/generate_injected.js",
+    "build:examples:todomvc": "npm run build --prefix ./examples/todomvc-crx",
+    "build:examples:recorder": "npm run build --prefix ./examples/recorder-crx",
+    "build:examples": "npm run build:examples:todomvc && npm run build:examples:recorder",
+    "clean:examples": "rimraf ./examples/recorder-crx/dist && rimraf ./examples/todomvc-crx/dist",
+    "build:tests": "npm run build --prefix ./tests",
+    "clean:tests": "rimraf ./tests/playwright-report && rimraf ./tests/test-results",
+    "generate:crx": "node ./utils/generate_test_types.js",
+    "build:crx": "npm run generate:pw && npm run generate:crx && vite build",
+    "clean:crx": "rimraf ./lib",
+    "build": "npm run ci:pw:bundles && npm run build:crx && npm run build:examples && npm run build:tests",
+    "clean": "npm run clean:pw && npm run clean:examples && npm run clean:tests && npm run clean:crx",
+    "test:install": "cd ./tests && npx playwright install --with-deps chromium chromium-tip-of-tree",
+    "test": "cd ./tests && npx playwright test",
+    "test-ui": "cd ./tests && npx playwright test --ui --timeout 0"
+  },
+  "workspaces": [
+    "examples/recorder-crx",
+    "examples/todomvc-crx",
+    "tests"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./lib/index.mjs",
+      "require": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./test": {
+      "types": "./test.d.ts",
+      "import": "./lib/test.mjs",
+      "require": "./lib/test.js",
+      "default": "./lib/test.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.266",
+    "@types/debug": "^4.1.12",
+    "@vitejs/plugin-react": "^4.2.1",
+    "assert": "^2.1.0",
+    "babel-bundle": "file:./playwright/packages/playwright/bundles/babel",
+    "browserify-zlib": "^0.2.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.0",
+    "debug": "^4.3.4",
+    "events": "^3.3.0",
+    "expect-bundle": "file:./playwright/packages/playwright/bundles/expect",
+    "https-browserify": "^1.0.0",
+    "inspector": "^0.5.0",
+    "memfs": "^4.7.7",
+    "os-browserify": "^0.3.0",
+    "path": "^0.12.7",
+    "process": "^0.11.10",
+    "react": "^18.1.0",
+    "react-dom": "^18.1.0",
+    "readable-stream": "^4.5.2",
+    "rimraf": "^5.0.5",
+    "rollup-plugin-sourcemaps": "^0.6.3",
+    "setimmediate": "^1.0.5",
+    "stream-http": "^3.2.0",
+    "string_decoder": "^1.3.0",
+    "test-utils-bundle": "file:./playwright/packages/playwright/bundles/utils",
+    "typescript": "^5.3.2",
+    "url": "^0.11.3",
+    "util": "^0.12.5",
+    "utils-bundle": "file:./playwright/packages/playwright-core/bundles/utils",
+    "vite": "^5.0.13",
+    "vite-plugin-require-transform": "1.0.21",
+    "web-package": "file:./playwright/packages/web",
+    "zip-bundle": "file:./playwright/packages/playwright-core/bundles/zip"
+  }
+}
+    ```
+
+    CONTRIBUTING.md
+    Content:
+    ```
+File: CONTRIBUTING.md
+
+We use playwright to test playwright-crx.
+The `context` fixture is extended to load a `playwright-crx` extension (e.g., recorder-crx or test-entension)
+To run tests in our `test-extension` just use `crxTest.ts` and use the `runCrxTest` with your test function.
+It will run the function inside the extension:
+```ts
+import { test } from './crxTest';
+test('should add todo item', async ({ runCrxTest }) => {
+  await runCrxTest(async ({ page }) => {
+    await page.goto('https://demo.playwright.dev/todomvc');
+    await page.getByPlaceholder('What needs to be done?').fill('Hello world');
+    await page.getByPlaceholder('What needs to be done?').press('Enter');
+  });
+});
+```
+Debugging an extension service worker requires opening its service worker devtools.
+That can be done in `chrome://extensions` but to avoid lots of clicks and to allow test debugging, you can use the `_extensionServiceWorkerDevtools` fixture.
+This fixture will open the extension devtools and set a `debugger` instruction for the debugger to pause before running the test.
+That way, you can set all necessary breakpoints before continuing the execution.
+Here is an example using both `runCrxTest` and `_extensionServiceWorkerDevtools`:
+```ts
+test(`should debug`, async ({ runCrxTest, _extensionServiceWorkerDevtools }) => {
+  await runCrxTest(async ({ crxApp, page /* other fixtures */ }) => {
+  });
+});
+```
+    ```
+
+    split_large_file.py
+    Content:
+    ```
+File: split_large_file.py
+
+import os
+import argparse
+def split_file(input_file, output_dir, max_size_mb=9):
+    max_size_bytes = max_size_mb * 1024 * 1024  
+    os.makedirs(output_dir, exist_ok=True)
+    file_number = 1
+    current_size = 0
+    current_content = []
+    with open(input_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line_size = len(line.encode('utf-8'))
+            if current_size + line_size > max_size_bytes:
+                output_file = os.path.join(output_dir, f'split_{file_number}.txt')
+                with open(output_file, 'w', encoding='utf-8') as out_f:
+                    out_f.writelines(current_content)
+                print(f"Created {output_file}")
+                file_number += 1
+                current_size = 0
+                current_content = []
+            current_size += line_size
+            current_content.append(line)
+    if current_content:
+        output_file = os.path.join(output_dir, f'split_{file_number}.txt')
+        with open(output_file, 'w', encoding='utf-8') as out_f:
+            out_f.writelines(current_content)
+        print(f"Created {output_file}")
+def main():
+    parser = argparse.ArgumentParser(description='Split a large text file into smaller files, each not exceeding a specified size.')
+    parser.add_argument('input_file', help='Path to the input text file')
+    parser.add_argument('output_dir', help='Directory to store the split files')
+    parser.add_argument('--max_size', type=int, default=9, help='Maximum size of each split file in MB (default: 9)')
+    args = parser.parse_args()
+    split_file(args.input_file, args.output_dir, args.max_size)
+    print("File splitting completed successfully.")
+if __name__ == '__main__':
+    main()
+    ```
+
+    .gitattributes
+    project_to_text.py
+    Content:
+    ```
+File: project_to_text.py
+
+import os
+import argparse
+import re
+def remove_all_comments(code, file_extension):
+    if file_extension in ['.py']:
+        code = re.sub(r'', '', code)
+        code = re.sub(r"", '', code)
+        code = re.sub(r'
+    elif file_extension in ['.js', '.java', '.c', '.cpp', '.ts', '.cs']:
+        code = re.sub(r'/\*[\s\S]*?\*/', '', code)
+        code = re.sub(r'//.*', '', code)
+    elif file_extension in ['.html', '.xml']:
+        code = re.sub(r'<!--[\s\S]*?-->', '', code)
+    elif file_extension in ['.css', '.scss', '.less']:
+        code = re.sub(r'/\*[\s\S]*?\*/', '', code)
+    code = re.sub(r'^\s*
+    code = re.sub(r'^\s*//.*$', '', code, flags=re.MULTILINE)
+    code = re.sub(r'^
+    code = re.sub(r'^\s*\* .*$', '', code, flags=re.MULTILINE)
+    code = re.sub(r'^\s*\*.*$', '', code, flags=re.MULTILINE)
+    code = re.sub(r'^\s*@license.*$', '', code, flags=re.MULTILINE)
+    code = re.sub(r'^\s*@copyright.*$', '', code, flags=re.MULTILINE)
+    code = '\n'.join(line for line in code.splitlines() if line.strip())
+    return code.strip()
+def project_to_text(project_path, output_file):
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for root, dirs, files in os.walk(project_path):
+            level = root.replace(project_path, '').count(os.sep)
+            indent = ' ' * 4 * level
+            f.write(f'{indent}{os.path.basename(root)}/\n')
+            subindent = ' ' * 4 * (level + 1)
+            for file in files:
+                relative_path = os.path.relpath(os.path.join(root, file), project_path)
+                f.write(f'{subindent}{file}\n')
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as content_file:
+                        content = content_file.read()
+                        file_extension = os.path.splitext(file)[1].lower()
+                        content_without_comments = remove_all_comments(content, file_extension)
+                        if content_without_comments.strip():  
+                            f.write(f'{subindent}Content:\n')
+                            f.write(f'{subindent}```\n')
+                            f.write(f'File: {relative_path}\n\n')
+                            f.write(f'{content_without_comments}\n')
+                            f.write(f'{subindent}```\n\n')
+                except Exception as e:
+                    f.write(f'{subindent}Error reading file: {str(e)}\n\n')
+def main():
+    parser = argparse.ArgumentParser(description='Convert a project folder to a single text file, excluding all comments.')
+    parser.add_argument('project_path', help='Path to the project folder')
+    parser.add_argument('output_file', help='Path to the output text file')
+    args = parser.parse_args()
+    project_to_text(args.project_path, args.output_file)
+    print(f"Project converted successfully. Output saved to {args.output_file}")
+if __name__ == '__main__':
+    main()
+    ```
+
+    tsconfig.json
+    Content:
+    ```
+File: tsconfig.json
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": false,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true,
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "baseUrl": ".",
+    "useUnknownInCatchVariables": false,
+    "paths": {
+      "@html-reporter/*": ["./playwright/packages/html-reporter/src/*"],
+      "@injected/*": ["./playwright/packages/playwright-core/src/server/injected/*"],
+      "@isomorphic/*": ["./playwright/packages/playwright-core/src/utils/isomorphic/*"],
+      "@protocol/*": ["./playwright/packages/protocol/src/*"],
+      "@recorder/*": ["./playwright/packages/recorder/src/*"],
+      "@testIsomorphic/*": ["./playwright/packages/playwright/src/isomorphic/*"],
+      "@trace/*": ["./playwright/packages/trace/src/*"],
+      "@web/*": ["./playwright/packages/web/src/*"],
+      "playwright-core/lib/*": ["./playwright/packages/playwright-core/src/*"],
+      "@playwright/test/lib/*": ["./playwright/packages/playwright/src/*"],
+      "tests/*": ["./playwright/tests/*"],
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+    ```
+
+    project.txt
+    Content:
+    ```
+File: project.txt
+
+playwright-crx-testing-dummy/
+    tsconfig.node.json
+    Content:
+    ```
+File: tsconfig.node.json
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+  },
+  "include": ["../recorder/vite.config.ts"]
+}
+    ```
+    .DS_Store
+    Error reading file: 'utf-8' codec can't decode byte 0xad in position 1062: invalid start byte
+    test.d.ts
+    Content:
+    ```
+File: test.d.ts
+export * from './index';
+export { expect, Expect } from './src/types/test';
+    ```
+    .editorconfig
+    Content:
+    ```
+File: .editorconfig
+root = true
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+    ```
+    README.md
+    Content:
+    ```
+File: README.md
+This package contains the [Chrome Extensions](https://developer.chrome.com/docs/extensions/) flavor of the [Playwright](http://github.com/microsoft/playwright) library.
+For that, it relies on [`chrome.debugger`](https://developer.chrome.com/docs/extensions/reference/debugger/) to implement [playwright's `ConnectionTransport`](https://github.com/microsoft/playwright/blob/f8a30fb726bc35d4058a2d010b2ed5f6ca2409a3/packages/playwright-core/src/server/transport.ts#L54) interface.
+A small demo of Playwright CRX recorder and player in action:
+It provides playwright recorder (the same used in `playwright codegen`) bundled as a chrome extension, with no other dependencies.
+This way, with your normal chrome / chromium / edge browser, you can record playwright scripts in your prefered language.
+In terms of chrome extension functionality, it provides:
+- [action button](https://developer.chrome.com/docs/extensions/reference/action/) for attaching current tab into recorder (it opens the recorder if it's closed)
+- [context menu](https://developer.chrome.com/docs/extensions/reference/contextMenus/) for the same purpose
+- [side panel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) to display the recorder by default (it can be disabled in the options, falling back to a popup window)
+- [command shortcuts](https://developer.chrome.com/docs/extensions/reference/api/commands):
+  - `Alt + Shift + R` starts recording
+  - `Alt + Shift + C` starts inspecting
+- [options page](https://developer.chrome.com/docs/extensions/develop/ui/options-page) to configure:
+  - **Default language** (defaults to **Node Library**)
+  - **TestID Attribute Name** (defaults to `data-testid`)
+  - **Open in Side Panel** (defaults to `true`, and falls back to a popup window if set to `false`) 
+- pages must be explicitly attached to be recordable, except if they are opened from already attached pages
+- closing the recorder window will detach all pages and uninstall injected scripts (highlights and event listeners)
+- a player that will run the recorded instructions, in any supported language*
+   - it actually doesn't run Java, Python or C#, but it uses an internal JSONL format to know which instructions it needs to run and how to map them into the current selected code. This way, it can highlight the lines being executed.
+It's possible to use `playwright-crx` as a library to create new chrome extensions.
+Here's a simple example of a background service worker for a chrome extension using **playwright-crx**:
+```ts
+import { crx, expect } from 'playwright-crx/test';
+chrome.action.onClicked.addListener(async ({ id: tabId }) => {
+  const crxApp = await crx.start({ slowMo: 500 });
+  try {
+    const page = await crxApp.attach(tabId!).catch(() => crxApp.newPage());
+    await page.goto('https://demo.playwright.dev/todomvc/#/');
+    await page.getByPlaceholder('What needs to be done?').click();
+    await page.getByPlaceholder('What needs to be done?').fill('Hello World!');
+    await page.getByPlaceholder('What needs to be done?').press('Enter');
+    await expect(page.getByTestId('todo-title')).toHaveText('Hello World!');
+  } finally {
+    await crxApp.detach(page);
+    await crxApp.close();
+  }
+});
+```
+A more complete example can be found in `examples/todomvc-crx`.
+To build `playwright-crx`:
+```bash
+npm ci
+npm run build
+```
+Playwright is nested as a git subtree.
+To update it, just run the following command (replace `v1.48.0` with the desired release tag):
+```bash
+git subtree pull --prefix=playwright git@github.com:microsoft/playwright.git v1.48.0 --squash
+```
+    ```
+    .gitignore
+    Content:
+    ```
+File: .gitignore
+node_modules/
+lib/
+    ```
+    package.json
+    Content:
+    ```
+File: package.json
+{
+  "name": "playwright-crx",
+  "version": "0.10.0",
+  "engines": {
+    "node": ">=16"
+  },
+  "author": {
+    "name": "Rui Figueira"
+  },
+  "license": "Apache-2.0",
+  "scripts": {
+    "ci:pw:core-utils-bundle": "npm ci --prefix ./playwright/packages/playwright-core/bundles/utils",
+    "ci:pw:core-zip-bundle": "npm ci --prefix ./playwright/packages/playwright-core/bundles/zip",
+    "ci:pw:test-babel-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/babel",
+    "ci:pw:test-expect-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/expect",
+    "ci:pw:test-utils-bundle": "npm ci --prefix ./playwright/packages/playwright/bundles/utils",
+    "ci:pw:bundles": "npm run ci:pw:core-utils-bundle && npm run ci:pw:core-zip-bundle && npm run ci:pw:test-babel-bundle && npm run ci:pw:test-expect-bundle && npm run ci:pw:test-utils-bundle",
+    "clean:pw:bundles": "rimraf -g ./playwright/packages/playwright-core/bundles/**/node_modules && rimraf -g ./playwright/packages/playwright/bundles/**/node_modules",
+    "clean:pw": "npm run clean:pw:bundles && cd ./playwright && npm run clean",
+    "generate:pw": "cd ./playwright && node ./utils/generate_injected.js",
+    "build:examples:todomvc": "npm run build --prefix ./examples/todomvc-crx",
+    "build:examples:recorder": "npm run build --prefix ./examples/recorder-crx",
+    "build:examples": "npm run build:examples:todomvc && npm run build:examples:recorder",
+    "clean:examples": "rimraf ./examples/recorder-crx/dist && rimraf ./examples/todomvc-crx/dist",
+    "build:tests": "npm run build --prefix ./tests",
+    "clean:tests": "rimraf ./tests/playwright-report && rimraf ./tests/test-results",
+    "generate:crx": "node ./utils/generate_test_types.js",
+    "build:crx": "npm run generate:pw && npm run generate:crx && vite build",
+    "clean:crx": "rimraf ./lib",
+    "build": "npm run ci:pw:bundles && npm run build:crx && npm run build:examples && npm run build:tests",
+    "clean": "npm run clean:pw && npm run clean:examples && npm run clean:tests && npm run clean:crx",
+    "test:install": "cd ./tests && npx playwright install --with-deps chromium chromium-tip-of-tree",
+    "test": "cd ./tests && npx playwright test",
+    "test-ui": "cd ./tests && npx playwright test --ui --timeout 0"
+  },
+  "workspaces": [
+    "examples/recorder-crx",
+    "examples/todomvc-crx",
+    "tests"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./lib/index.mjs",
+      "require": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./test": {
+      "types": "./test.d.ts",
+      "import": "./lib/test.mjs",
+      "require": "./lib/test.js",
+      "default": "./lib/test.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.266",
+    "@types/debug": "^4.1.12",
+    "@vitejs/plugin-react": "^4.2.1",
+    "assert": "^2.1.0",
+    "babel-bundle": "file:./playwright/packages/playwright/bundles/babel",
+    "browserify-zlib": "^0.2.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.0",
+    "debug": "^4.3.4",
+    "events": "^3.3.0",
+    "expect-bundle": "file:./playwright/packages/playwright/bundles/expect",
+    "https-browserify": "^1.0.0",
+    "inspector": "^0.5.0",
+    "memfs": "^4.7.7",
+    "os-browserify": "^0.3.0",
+    "path": "^0.12.7",
+    "process": "^0.11.10",
+    "react": "^18.1.0",
+    "react-dom": "^18.1.0",
+    "readable-stream": "^4.5.2",
+    "rimraf": "^5.0.5",
+    "rollup-plugin-sourcemaps": "^0.6.3",
+    "setimmediate": "^1.0.5",
+    "stream-http": "^3.2.0",
+    "string_decoder": "^1.3.0",
+    "test-utils-bundle": "file:./playwright/packages/playwright/bundles/utils",
+    "typescript": "^5.3.2",
+    "url": "^0.11.3",
+    "util": "^0.12.5",
+    "utils-bundle": "file:./playwright/packages/playwright-core/bundles/utils",
+    "vite": "^5.0.13",
+    "vite-plugin-require-transform": "1.0.21",
+    "web-package": "file:./playwright/packages/web",
+    "zip-bundle": "file:./playwright/packages/playwright-core/bundles/zip"
+  }
+}
+    ```
+
+    vite.config.ts
+    Content:
+    ```
+File: vite.config.ts
+
+import path from 'path';
+import sourcemaps from 'rollup-plugin-sourcemaps';
+import { defineConfig } from 'vite';
+import requireTransform from 'vite-plugin-require-transform';
+const requireTransformFiles = [
+  'playwright/packages/playwright-core/bundles/utils/src/utilsBundleImpl.ts',
+  'playwright/packages/playwright-core/src/server/dispatchers/localUtilsDispatcher.ts',
+  'playwright/packages/playwright-core/src/server/recorder/csharp.ts',
+  'playwright/packages/playwright-core/src/server/recorder/java.ts',
+  'playwright/packages/playwright-core/src/server/recorder/javascript.ts',
+  'playwright/packages/playwright-core/src/server/recorder/python.ts',
+  'playwright/packages/playwright-core/src/server/registry/dependencies.ts',
+  'playwright/packages/playwright-core/src/server/registry/index.ts',
+  'playwright/packages/playwright-core/src/utils/comparators.ts',
+  'playwright/packages/playwright-core/src/utils/userAgent.ts',
+  'playwright/packages/playwright-core/src/utilsBundle.ts',
+  'playwright/packages/playwright-core/src/zipBundle.ts',
+  'playwright/packages/playwright/bundles/babel/src/babelBundleImpl.ts',
+  'playwright/packages/playwright/src/common/config.ts',
+  'playwright/packages/playwright/src/common/expectBundle.ts',
+  'playwright/packages/playwright/src/index.ts',
+  'playwright/packages/playwright/src/transform/babelBundle.ts',
+  'playwright/packages/playwright/src/transform/transform.ts',
+  'playwright/packages/playwright/src/utilsBundle.ts',
+];
+export default defineConfig({
+  plugins: [
+    requireTransform({ fileRegex: new RegExp('(' + requireTransformFiles.map(s => s.replace(/\
+  ],
+  resolve: {
+    alias: {
+      'playwright-core/lib': path.resolve(__dirname, './playwright/packages/playwright-core/src'),
+      '@playwright/test/lib': path.resolve(__dirname, './playwright/packages/playwright/src'),
+      'playwright-core': path.resolve(__dirname, './src/index'),
+      './utilsBundleImpl': '../bundles/utils/src/utilsBundleImpl',
+      './zipBundleImpl': '../bundles/zip/src/zipBundleImpl',
+      './babelBundleImpl': '../../bundles/babel/src/babelBundleImpl',
+      './expectBundleImpl': '../../bundles/expect/src/expectBundleImpl',
+      '_url': path.resolve(__dirname, './node_modules/url'),
+      '_util': path.resolve(__dirname, './node_modules/util'),
+      'async_hooks': path.resolve(__dirname, './src/shims/async_hooks'),
+      'assert': path.resolve(__dirname, './node_modules/assert'),
+      'buffer': path.resolve(__dirname, './node_modules/buffer'),
+      'child_process': path.resolve(__dirname, './src/shims/child_process'),
+      'chokidar': path.resolve(__dirname, './src/shims/chokidar'),
+      'constants': path.resolve(__dirname, './node_modules/constants-browserify'),
+      'crypto': path.resolve(__dirname, './node_modules/crypto-browserify'),
+      'debug': path.resolve(__dirname, './node_modules/debug'),
+      'dns': path.resolve(__dirname, './src/shims/dns'),
+      'events': path.resolve(__dirname, './node_modules/events'),
+      'fs': path.resolve(__dirname, './src/shims/fs'),
+      'graceful-fs': path.resolve(__dirname, './src/shims/fs'),
+      'http': path.resolve(__dirname, './node_modules/stream-http'),
+      'http2': path.resolve(__dirname, './node_modules/stream-http'),
+      'https': path.resolve(__dirname, './node_modules/https-browserify'),
+      'module': path.resolve(__dirname, './src/shims/module'),
+      'net': path.resolve(__dirname, './src/shims/net'),
+      'os': path.resolve(__dirname, './node_modules/os-browserify/browser'),
+      'path': path.resolve(__dirname, './node_modules/path'),
+      'process': path.resolve(__dirname, './node_modules/process'),
+      'readline': path.resolve(__dirname, './src/shims/readline'),
+      'setimmediate': path.resolve(__dirname, './node_modules/setimmediate'),
+      'stream': path.resolve(__dirname, './node_modules/readable-stream'),
+      'tls': path.resolve(__dirname, './src/shims/tls'),
+      'url': path.resolve(__dirname, './src/shims/url'),
+      'util': path.resolve(__dirname, './src/shims/util'),
+      'zlib': path.resolve(__dirname, './node_modules/browserify-zlib'),
+      'node:events': path.resolve(__dirname, './node_modules/events'),
+      'node:stream': path.resolve(__dirname, './node_modules/readable-stream'),
+      'node:string_decoder': path.resolve(__dirname, './node_modules/string_decoder'),
+    },
+  },
+  define: {
+    'require.resolve': 'Boolean',
+  },
+  build: {
+    outDir: path.resolve(__dirname, './lib/'),
+    minify: false,
+    lib: {
+      entry: {
+        index: path.resolve(__dirname, 'src/index.ts'),
+        test: path.resolve(__dirname, 'src/test.ts'),
+      },
+    },
+    sourcemap: true,
+    rollupOptions: {
+      plugins: [sourcemaps()],
+    },
+    commonjsOptions: {
+      include: [
+        path.resolve(__dirname, './playwright/packages/playwright-core/src*.js'),
+        path.resolve(__dirname, './playwright/packages/playwright-core/bundles/utils/src/third_party*.js'),
+        /node_modules/,
+      ],
+    }
+  },
+});
+    ```
+
+    index.d.ts
+    Content:
+    ```
+File: index.d.ts
+
+import type { Crx } from './src/types/types';
+export * from './src/types/types';
+export const crx: Crx;
+export function _setUnderTest(): void;
+export const _debug: {
+  enable(namespaces: string): void;
+  enabled(namespaces: string): boolean;
+  disable(): void;
+};
+    ```
+
+    utils/
+        generate_test_types.js
+        Content:
+        ```
+File: utils/generate_test_types.js
+
+const fs = require('fs');
+const path = require('path');
+const srcFile = path.join(__dirname, '..', 'playwright', 'packages', 'playwright', 'types', 'test.d.ts');
+const destFile = path.join(__dirname, '..', 'src', 'types', 'test.d.ts');
+const content = fs.readFileSync(srcFile, 'utf8');
+const result = content
+  .replace(/'playwright-core'/g, `'./types'`)
+  .replace(/\/\/ This file is generated by (.*)$/g, `This file is generated by ${path.basename(__filename)}`)
+  .replace(/ \* Copyright \(c\) Microsoft Corporation./, [
+    ' * Copyright (c) Microsoft Corporation.',
+    ' * Modifications copyright (c) Rui Figueira.',
+  ].join('\n'));
+fs.writeFileSync(destFile, result, 'utf8');
+        ```
+
+    examples/
+        .DS_Store
+        Error reading file: 'utf-8' codec can't decode byte 0x96 in position 566: invalid start byte
+
+        todomvc-crx/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0xed in position 328: invalid continuation byte
+
+            .gitignore
+            Content:
+            ```
+File: examples/todomvc-crx/.gitignore
+
+dist/
+            ```
+
+            package-lock.json
+            Content:
+            ```
+File: examples/todomvc-crx/package-lock.json
+
+{
+  "name": "todomvc-crx",
+  "version": "0.10.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "todomvc-crx",
+      "version": "0.10.0",
+      "license": "ISC",
+      "dependencies": {
+        "playwright-crx": "0.10.0"
+      },
+      "devDependencies": {
+        "@types/chrome": "^0.0.266",
+        "typescript": "^5.1.3",
+        "vite": "^4.3.9"
+      }
+    },
+    "node_modules/@esbuild/android-arm": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.18.20.tgz",
+      "integrity": "sha512-fyi7TDI/ijKKNZTUJAQqiG5T7YjJXgnzkURqmGj13C6dCqckZBLdl4h7bkhHt/t0WP+zO9/zwroDvANaOqO5Sw==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.18.20.tgz",
+      "integrity": "sha512-Nz4rJcchGDtENV0eMKUNa6L12zz2zBDXuhj/Vjh18zGqB44Bi7MBMSXjgunJgjRhCmKOjnPuZp4Mb6OKqtMHLQ==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.18.20.tgz",
+      "integrity": "sha512-8GDdlePJA8D6zlZYJV/jnrRAi6rOiNaCC/JclcXpB+KIuvfBN4owLtgzY2bsxnx666XjJx2kDPUmnTtR8qKQUg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.18.20.tgz",
+      "integrity": "sha512-bxRHW5kHU38zS2lPTPOyuyTm+S+eobPUnTNkdJEfAddYgEcll4xkT8DB9d2008DtTbl7uJag2HuE5NZAZgnNEA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.18.20.tgz",
+      "integrity": "sha512-pc5gxlMDxzm513qPGbCbDukOdsGtKhfxD1zJKXjCCcU7ju50O7MeAZ8c4krSJcOIJGFR+qx21yMMVYwiQvyTyQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.18.20.tgz",
+      "integrity": "sha512-yqDQHy4QHevpMAaxhhIwYPMv1NECwOvIpGCZkECn8w2WFHXjEwrBn3CeNIYsibZ/iZEUemj++M26W3cNR5h+Tw==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.18.20.tgz",
+      "integrity": "sha512-tgWRPPuQsd3RmBZwarGVHZQvtzfEBOreNuxEMKFcd5DaDn2PbBxfwLcj4+aenoh7ctXcbXmOQIn8HI6mCSw5MQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.18.20.tgz",
+      "integrity": "sha512-/5bHkMWnq1EgKr1V+Ybz3s1hWXok7mDFUMQ4cG10AfW3wL02PSZi5kFpYKrptDsgb2WAJIvRcDm+qIvXf/apvg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.18.20.tgz",
+      "integrity": "sha512-2YbscF+UL7SQAVIpnWvYwM+3LskyDmPhe31pE7/aoTMFKKzIc9lLbyGUpmmb8a8AixOL61sQ/mFh3jEjHYFvdA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ia32": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.18.20.tgz",
+      "integrity": "sha512-P4etWwq6IsReT0E1KHU40bOnzMHoH73aXp96Fs8TIT6z9Hu8G6+0SHSw9i2isWrD2nbx2qo5yUqACgdfVGx7TA==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-loong64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.18.20.tgz",
+      "integrity": "sha512-nXW8nqBTrOpDLPgPY9uV+/1DjxoQ7DoB2N8eocyq8I9XuqJ7BiAMDMf9n1xZM9TgW0J8zrquIb/A7s3BJv7rjg==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-mips64el": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.18.20.tgz",
+      "integrity": "sha512-d5NeaXZcHp8PzYy5VnXV3VSd2D328Zb+9dEq5HE6bw6+N86JVPExrA6O68OPwobntbNJ0pzCpUFZTo3w0GyetQ==",
+      "cpu": [
+        "mips64el"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ppc64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.18.20.tgz",
+      "integrity": "sha512-WHPyeScRNcmANnLQkq6AfyXRFr5D6N2sKgkFo2FqguP44Nw2eyDlbTdZwd9GYk98DZG9QItIiTlFLHJHjxP3FA==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-riscv64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.18.20.tgz",
+      "integrity": "sha512-WSxo6h5ecI5XH34KC7w5veNnKkju3zBRLEQNY7mv5mtBmrP/MjNBCAlsM2u5hDBlS3NGcTQpoBvRzqBcRtpq1A==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-s390x": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.18.20.tgz",
+      "integrity": "sha512-+8231GMs3mAEth6Ja1iK0a1sQ3ohfcpzpRLH8uuc5/KVDFneH6jtAJLFGafpzpMRO6DzJ6AvXKze9LfFMrIHVQ==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.18.20.tgz",
+      "integrity": "sha512-UYqiqemphJcNsFEskc73jQ7B9jgwjWrSayxawS6UVFZGWrAAtkzjxSqnoclCXxWtfwLdzU+vTpcNYhpn43uP1w==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/netbsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.18.20.tgz",
+      "integrity": "sha512-iO1c++VP6xUBUmltHZoMtCUdPlnPGdBom6IrO4gyKPFFVBKioIImVooR5I83nTew5UOYrk3gIJhbZh8X44y06A==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "netbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/openbsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.18.20.tgz",
+      "integrity": "sha512-e5e4YSsuQfX4cxcygw/UCPIEP6wbIL+se3sxPdCiMbFLBWu0eiZOJ7WoD+ptCLrmjZBK1Wk7I6D/I3NglUGOxg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "openbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/sunos-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.18.20.tgz",
+      "integrity": "sha512-kDbFRFp0YpTQVVrqUd5FTYmWo45zGaXe0X8E1G/LKFC0v8x0vWrhOWSLITcCn63lmZIxfOMXtCfti/RxN/0wnQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "sunos"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.18.20.tgz",
+      "integrity": "sha512-ddYFR6ItYgoaq4v4JmQQaAI5s7npztfV4Ag6NrhiaW0RrnOXqBkgwZLofVTlq1daVTQNhtI5oieTvkRPfZrePg==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-ia32": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.18.20.tgz",
+      "integrity": "sha512-Wv7QBi3ID/rROT08SABTS7eV4hX26sVduqDOTe1MvGMjNd3EjOz4b7zeexIR62GTIEKrfJXKL9LFxTYgkyeu7g==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.18.20.tgz",
+      "integrity": "sha512-kTdfRcSiDfQca/y9QIkng02avJ+NCaQvrMejlsB3RRv5sE9rRoeBPISaZpKxHELzRxZyLvNts1P27W3wV+8geQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@types/chrome": {
+      "version": "0.0.266",
+      "resolved": "https://registry.npmjs.org/@types/chrome/-/chrome-0.0.266.tgz",
+      "integrity": "sha512-QSQWJTL7NjZElvq/6/E5C1+pHgEP8UAJzwoz7M4vSJ7AECt6NNehJ+tU6snnvuTqZOBjFCivvitYo5+8tNPmhg==",
+      "dev": true,
+      "dependencies": {
+        "@types/filesystem": "*",
+        "@types/har-format": "*"
+      }
+    },
+    "node_modules/@types/filesystem": {
+      "version": "0.0.36",
+      "resolved": "https://registry.npmjs.org/@types/filesystem/-/filesystem-0.0.36.tgz",
+      "integrity": "sha512-vPDXOZuannb9FZdxgHnqSwAG/jvdGM8Wq+6N4D/d80z+D4HWH+bItqsZaVRQykAn6WEVeEkLm2oQigyHtgb0RA==",
+      "dev": true,
+      "dependencies": {
+        "@types/filewriter": "*"
+      }
+    },
+    "node_modules/@types/filewriter": {
+      "version": "0.0.33",
+      "resolved": "https://registry.npmjs.org/@types/filewriter/-/filewriter-0.0.33.tgz",
+      "integrity": "sha512-xFU8ZXTw4gd358lb2jw25nxY9QAgqn2+bKKjKOYfNCzN4DKCFetK7sPtrlpg66Ywe3vWY9FNxprZawAh9wfJ3g==",
+      "dev": true
+    },
+    "node_modules/@types/har-format": {
+      "version": "1.2.16",
+      "resolved": "https://registry.npmjs.org/@types/har-format/-/har-format-1.2.16.tgz",
+      "integrity": "sha512-fluxdy7ryD3MV6h8pTfTYpy/xQzCFC7m89nOH9y94cNqJ1mDIDPut7MnRHI3F6qRmh/cT2fUjG1MLdCNb4hE9A==",
+      "dev": true
+    },
+    "node_modules/esbuild": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.18.20.tgz",
+      "integrity": "sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA==",
+      "dev": true,
+      "hasInstallScript": true,
+      "bin": {
+        "esbuild": "bin/esbuild"
+      },
+      "engines": {
+        "node": ">=12"
+      },
+      "optionalDependencies": {
+        "@esbuild/android-arm": "0.18.20",
+        "@esbuild/android-arm64": "0.18.20",
+        "@esbuild/android-x64": "0.18.20",
+        "@esbuild/darwin-arm64": "0.18.20",
+        "@esbuild/darwin-x64": "0.18.20",
+        "@esbuild/freebsd-arm64": "0.18.20",
+        "@esbuild/freebsd-x64": "0.18.20",
+        "@esbuild/linux-arm": "0.18.20",
+        "@esbuild/linux-arm64": "0.18.20",
+        "@esbuild/linux-ia32": "0.18.20",
+        "@esbuild/linux-loong64": "0.18.20",
+        "@esbuild/linux-mips64el": "0.18.20",
+        "@esbuild/linux-ppc64": "0.18.20",
+        "@esbuild/linux-riscv64": "0.18.20",
+        "@esbuild/linux-s390x": "0.18.20",
+        "@esbuild/linux-x64": "0.18.20",
+        "@esbuild/netbsd-x64": "0.18.20",
+        "@esbuild/openbsd-x64": "0.18.20",
+        "@esbuild/sunos-x64": "0.18.20",
+        "@esbuild/win32-arm64": "0.18.20",
+        "@esbuild/win32-ia32": "0.18.20",
+        "@esbuild/win32-x64": "0.18.20"
+      }
+    },
+    "node_modules/fsevents": {
+      "version": "2.3.3",
+      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+      "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+      }
+    },
+    "node_modules/nanoid": {
+      "version": "3.3.7",
+      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.7.tgz",
+      "integrity": "sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "bin": {
+        "nanoid": "bin/nanoid.cjs"
+      },
+      "engines": {
+        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+      }
+    },
+    "node_modules/picocolors": {
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "dev": true
+    },
+    "node_modules/playwright-crx": {
+      "version": "0.10.0",
+      "resolved": "https://registry.npmjs.org/playwright-crx/-/playwright-crx-0.10.0.tgz",
+      "integrity": "sha512-TEd9c652Thissl0sZ+hFXNk5/Ibyhowhje92quVNgMZ+fYdscfV1IMPMoSRqoUANuVgv28ifJ3qqeU3ziszESA==",
+      "engines": {
+        "node": ">=16"
+      }
+    },
+    "node_modules/postcss": {
+      "version": "8.4.47",
+      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.4.47.tgz",
+      "integrity": "sha512-56rxCq7G/XfB4EkXq9Egn5GCqugWvDFjafDOThIdMBsI15iqPqR5r15TfSr1YPYeEI19YeaXMCbY6u88Y76GLQ==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/postcss/"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/postcss"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "dependencies": {
+        "nanoid": "^3.3.7",
+        "picocolors": "^1.1.0",
+        "source-map-js": "^1.2.1"
+      },
+      "engines": {
+        "node": "^10 || ^12 || >=14"
+      }
+    },
+    "node_modules/rollup": {
+      "version": "3.29.5",
+      "resolved": "https://registry.npmjs.org/rollup/-/rollup-3.29.5.tgz",
+      "integrity": "sha512-GVsDdsbJzzy4S/v3dqWPJ7EfvZJfCHiDqe80IyrF59LYuP+e6U1LJoUqeuqRbwAWoMNoXivMNeNAOf5E22VA1w==",
+      "dev": true,
+      "bin": {
+        "rollup": "dist/bin/rollup"
+      },
+      "engines": {
+        "node": ">=14.18.0",
+        "npm": ">=8.0.0"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.2"
+      }
+    },
+    "node_modules/source-map-js": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "dev": true,
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/typescript": {
+      "version": "5.6.3",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.6.3.tgz",
+      "integrity": "sha512-hjcS1mhfuyi4WW8IWtjP7brDrG2cuDZukyrYrSauoXGNgx0S7zceP07adYkJycEr56BOUTNPzbInooiN3fn1qw==",
+      "dev": true,
+      "bin": {
+        "tsc": "bin/tsc",
+        "tsserver": "bin/tsserver"
+      },
+      "engines": {
+        "node": ">=14.17"
+      }
+    },
+    "node_modules/vite": {
+      "version": "4.5.5",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-4.5.5.tgz",
+      "integrity": "sha512-ifW3Lb2sMdX+WU91s3R0FyQlAyLxOzCSCP37ujw0+r5POeHPwe6udWVIElKQq8gk3t7b8rkmvqC6IHBpCff4GQ==",
+      "dev": true,
+      "dependencies": {
+        "esbuild": "^0.18.10",
+        "postcss": "^8.4.27",
+        "rollup": "^3.27.1"
+      },
+      "bin": {
+        "vite": "bin/vite.js"
+      },
+      "engines": {
+        "node": "^14.18.0 || >=16.0.0"
+      },
+      "funding": {
+        "url": "https://github.com/vitejs/vite?sponsor=1"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.2"
+      },
+      "peerDependencies": {
+        "@types/node": ">= 14",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.4.0"
+      },
+      "peerDependenciesMeta": {
+        "@types/node": {
+          "optional": true
+        },
+        "less": {
+          "optional": true
+        },
+        "lightningcss": {
+          "optional": true
+        },
+        "sass": {
+          "optional": true
+        },
+        "stylus": {
+          "optional": true
+        },
+        "sugarss": {
+          "optional": true
+        },
+        "terser": {
+          "optional": true
+        }
+      }
+    }
+  }
+}
+            ```
+
+            package.json
+            Content:
+            ```
+File: examples/todomvc-crx/package.json
+
+{
+  "name": "todomvc-crx",
+  "version": "0.10.0",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "playwright-crx": "0.10.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.266",
+    "typescript": "^5.1.3",
+    "vite": "^4.3.9"
+  }
+}
+            ```
+
+            tsconfig.json
+            Content:
+            ```
+File: examples/todomvc-crx/tsconfig.json
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+            ```
+
+            vite.config.ts
+            Content:
+            ```
+File: examples/todomvc-crx/vite.config.ts
+
+import path from 'path';
+import { defineConfig } from 'vite';
+export default defineConfig({
+  build: {
+    minify: false,
+    rollupOptions: {
+      input: {
+        'background': path.resolve(__dirname, 'src/background.ts'),
+      },
+      output: {
+        entryFileNames: '[name].js',
+      },
+    },
+  },
+});
+            ```
+
+            public/
+                manifest.json
+                Content:
+                ```
+File: examples/todomvc-crx/public/manifest.json
+
+{
+  "name": "Playwright CRX - TodoMVC",
+  "version": "0.10.0",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Playwright CRX - TodoMVC"
+  },
+  "permissions": ["debugger", "tabs"]
+}
+                ```
+
+            src/
+                background.ts
+                Content:
+                ```
+File: examples/todomvc-crx/src/background.ts
+
+import { crx } from 'playwright-crx';
+import { createTodos } from './todos';
+chrome.action.onClicked.addListener(async ({ id: tabId }) => {
+  await chrome.action.disable();
+  const crxApp = await crx.start({ slowMo: 500 });
+  const page = await crxApp.attach(tabId!).catch(() => crxApp.newPage());
+  try {
+    await createTodos(page);
+  } finally {
+    await crxApp.close();
+    await chrome.action.enable();
+  }
+});
+                ```
+
+                todos.ts
+                Content:
+                ```
+File: examples/todomvc-crx/src/todos.ts
+
+import { Page, expect } from "playwright-crx/test";
+export async function createTodos(page: Page) {
+  const TODO_ITEMS = [
+    'buy some cheese',
+    'feed the cat',
+    'book a doctors appointment'
+  ];
+  await page.goto('https:
+  await page.evaluate(() => {
+    if (localStorage?.length) {
+      localStorage.clear();
+      location.reload();
+    }
+  });
+  const newTodo = page.getByPlaceholder('What needs to be done?');
+  for (const item of TODO_ITEMS) {
+    await newTodo.fill(item);
+    await newTodo.press('Enter');
+  }
+  await expect(page.getByTestId('todo-title')).toHaveText(TODO_ITEMS);
+}
+                ```
+
+        recorder-crx/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x9a in position 299: invalid start byte
+
+            .gitignore
+            Content:
+            ```
+File: examples/recorder-crx/.gitignore
+
+dist/
+            ```
+
+            package-lock.json
+            Content:
+            ```
+File: examples/recorder-crx/package-lock.json
+
+{
+  "name": "recorder-crx",
+  "version": "0.10.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "recorder-crx",
+      "version": "0.10.0",
+      "license": "ISC",
+      "dependencies": {
+        "playwright-crx": "0.10.0"
+      },
+      "devDependencies": {
+        "typescript": "^5.1.3",
+        "vite": "^4.3.9"
+      }
+    },
+    "node_modules/@esbuild/android-arm": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.18.20.tgz",
+      "integrity": "sha512-fyi7TDI/ijKKNZTUJAQqiG5T7YjJXgnzkURqmGj13C6dCqckZBLdl4h7bkhHt/t0WP+zO9/zwroDvANaOqO5Sw==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.18.20.tgz",
+      "integrity": "sha512-Nz4rJcchGDtENV0eMKUNa6L12zz2zBDXuhj/Vjh18zGqB44Bi7MBMSXjgunJgjRhCmKOjnPuZp4Mb6OKqtMHLQ==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/android-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.18.20.tgz",
+      "integrity": "sha512-8GDdlePJA8D6zlZYJV/jnrRAi6rOiNaCC/JclcXpB+KIuvfBN4owLtgzY2bsxnx666XjJx2kDPUmnTtR8qKQUg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "android"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.18.20.tgz",
+      "integrity": "sha512-bxRHW5kHU38zS2lPTPOyuyTm+S+eobPUnTNkdJEfAddYgEcll4xkT8DB9d2008DtTbl7uJag2HuE5NZAZgnNEA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/darwin-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.18.20.tgz",
+      "integrity": "sha512-pc5gxlMDxzm513qPGbCbDukOdsGtKhfxD1zJKXjCCcU7ju50O7MeAZ8c4krSJcOIJGFR+qx21yMMVYwiQvyTyQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.18.20.tgz",
+      "integrity": "sha512-yqDQHy4QHevpMAaxhhIwYPMv1NECwOvIpGCZkECn8w2WFHXjEwrBn3CeNIYsibZ/iZEUemj++M26W3cNR5h+Tw==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/freebsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.18.20.tgz",
+      "integrity": "sha512-tgWRPPuQsd3RmBZwarGVHZQvtzfEBOreNuxEMKFcd5DaDn2PbBxfwLcj4+aenoh7ctXcbXmOQIn8HI6mCSw5MQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "freebsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.18.20.tgz",
+      "integrity": "sha512-/5bHkMWnq1EgKr1V+Ybz3s1hWXok7mDFUMQ4cG10AfW3wL02PSZi5kFpYKrptDsgb2WAJIvRcDm+qIvXf/apvg==",
+      "cpu": [
+        "arm"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.18.20.tgz",
+      "integrity": "sha512-2YbscF+UL7SQAVIpnWvYwM+3LskyDmPhe31pE7/aoTMFKKzIc9lLbyGUpmmb8a8AixOL61sQ/mFh3jEjHYFvdA==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ia32": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.18.20.tgz",
+      "integrity": "sha512-P4etWwq6IsReT0E1KHU40bOnzMHoH73aXp96Fs8TIT6z9Hu8G6+0SHSw9i2isWrD2nbx2qo5yUqACgdfVGx7TA==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-loong64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.18.20.tgz",
+      "integrity": "sha512-nXW8nqBTrOpDLPgPY9uV+/1DjxoQ7DoB2N8eocyq8I9XuqJ7BiAMDMf9n1xZM9TgW0J8zrquIb/A7s3BJv7rjg==",
+      "cpu": [
+        "loong64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-mips64el": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.18.20.tgz",
+      "integrity": "sha512-d5NeaXZcHp8PzYy5VnXV3VSd2D328Zb+9dEq5HE6bw6+N86JVPExrA6O68OPwobntbNJ0pzCpUFZTo3w0GyetQ==",
+      "cpu": [
+        "mips64el"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-ppc64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.18.20.tgz",
+      "integrity": "sha512-WHPyeScRNcmANnLQkq6AfyXRFr5D6N2sKgkFo2FqguP44Nw2eyDlbTdZwd9GYk98DZG9QItIiTlFLHJHjxP3FA==",
+      "cpu": [
+        "ppc64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-riscv64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.18.20.tgz",
+      "integrity": "sha512-WSxo6h5ecI5XH34KC7w5veNnKkju3zBRLEQNY7mv5mtBmrP/MjNBCAlsM2u5hDBlS3NGcTQpoBvRzqBcRtpq1A==",
+      "cpu": [
+        "riscv64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-s390x": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.18.20.tgz",
+      "integrity": "sha512-+8231GMs3mAEth6Ja1iK0a1sQ3ohfcpzpRLH8uuc5/KVDFneH6jtAJLFGafpzpMRO6DzJ6AvXKze9LfFMrIHVQ==",
+      "cpu": [
+        "s390x"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/linux-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.18.20.tgz",
+      "integrity": "sha512-UYqiqemphJcNsFEskc73jQ7B9jgwjWrSayxawS6UVFZGWrAAtkzjxSqnoclCXxWtfwLdzU+vTpcNYhpn43uP1w==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "linux"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/netbsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.18.20.tgz",
+      "integrity": "sha512-iO1c++VP6xUBUmltHZoMtCUdPlnPGdBom6IrO4gyKPFFVBKioIImVooR5I83nTew5UOYrk3gIJhbZh8X44y06A==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "netbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/openbsd-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.18.20.tgz",
+      "integrity": "sha512-e5e4YSsuQfX4cxcygw/UCPIEP6wbIL+se3sxPdCiMbFLBWu0eiZOJ7WoD+ptCLrmjZBK1Wk7I6D/I3NglUGOxg==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "openbsd"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/sunos-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.18.20.tgz",
+      "integrity": "sha512-kDbFRFp0YpTQVVrqUd5FTYmWo45zGaXe0X8E1G/LKFC0v8x0vWrhOWSLITcCn63lmZIxfOMXtCfti/RxN/0wnQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "sunos"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-arm64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.18.20.tgz",
+      "integrity": "sha512-ddYFR6ItYgoaq4v4JmQQaAI5s7npztfV4Ag6NrhiaW0RrnOXqBkgwZLofVTlq1daVTQNhtI5oieTvkRPfZrePg==",
+      "cpu": [
+        "arm64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-ia32": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.18.20.tgz",
+      "integrity": "sha512-Wv7QBi3ID/rROT08SABTS7eV4hX26sVduqDOTe1MvGMjNd3EjOz4b7zeexIR62GTIEKrfJXKL9LFxTYgkyeu7g==",
+      "cpu": [
+        "ia32"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/@esbuild/win32-x64": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.18.20.tgz",
+      "integrity": "sha512-kTdfRcSiDfQca/y9QIkng02avJ+NCaQvrMejlsB3RRv5sE9rRoeBPISaZpKxHELzRxZyLvNts1P27W3wV+8geQ==",
+      "cpu": [
+        "x64"
+      ],
+      "dev": true,
+      "optional": true,
+      "os": [
+        "win32"
+      ],
+      "engines": {
+        "node": ">=12"
+      }
+    },
+    "node_modules/esbuild": {
+      "version": "0.18.20",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.18.20.tgz",
+      "integrity": "sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA==",
+      "dev": true,
+      "hasInstallScript": true,
+      "bin": {
+        "esbuild": "bin/esbuild"
+      },
+      "engines": {
+        "node": ">=12"
+      },
+      "optionalDependencies": {
+        "@esbuild/android-arm": "0.18.20",
+        "@esbuild/android-arm64": "0.18.20",
+        "@esbuild/android-x64": "0.18.20",
+        "@esbuild/darwin-arm64": "0.18.20",
+        "@esbuild/darwin-x64": "0.18.20",
+        "@esbuild/freebsd-arm64": "0.18.20",
+        "@esbuild/freebsd-x64": "0.18.20",
+        "@esbuild/linux-arm": "0.18.20",
+        "@esbuild/linux-arm64": "0.18.20",
+        "@esbuild/linux-ia32": "0.18.20",
+        "@esbuild/linux-loong64": "0.18.20",
+        "@esbuild/linux-mips64el": "0.18.20",
+        "@esbuild/linux-ppc64": "0.18.20",
+        "@esbuild/linux-riscv64": "0.18.20",
+        "@esbuild/linux-s390x": "0.18.20",
+        "@esbuild/linux-x64": "0.18.20",
+        "@esbuild/netbsd-x64": "0.18.20",
+        "@esbuild/openbsd-x64": "0.18.20",
+        "@esbuild/sunos-x64": "0.18.20",
+        "@esbuild/win32-arm64": "0.18.20",
+        "@esbuild/win32-ia32": "0.18.20",
+        "@esbuild/win32-x64": "0.18.20"
+      }
+    },
+    "node_modules/fsevents": {
+      "version": "2.3.3",
+      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+      "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+      "dev": true,
+      "hasInstallScript": true,
+      "optional": true,
+      "os": [
+        "darwin"
+      ],
+      "engines": {
+        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
+      }
+    },
+    "node_modules/nanoid": {
+      "version": "3.3.7",
+      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.7.tgz",
+      "integrity": "sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "bin": {
+        "nanoid": "bin/nanoid.cjs"
+      },
+      "engines": {
+        "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+      }
+    },
+    "node_modules/picocolors": {
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "dev": true
+    },
+    "node_modules/playwright-crx": {
+      "version": "0.10.0",
+      "resolved": "https://registry.npmjs.org/playwright-crx/-/playwright-crx-0.10.0.tgz",
+      "integrity": "sha512-TEd9c652Thissl0sZ+hFXNk5/Ibyhowhje92quVNgMZ+fYdscfV1IMPMoSRqoUANuVgv28ifJ3qqeU3ziszESA==",
+      "engines": {
+        "node": ">=16"
+      }
+    },
+    "node_modules/postcss": {
+      "version": "8.4.47",
+      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.4.47.tgz",
+      "integrity": "sha512-56rxCq7G/XfB4EkXq9Egn5GCqugWvDFjafDOThIdMBsI15iqPqR5r15TfSr1YPYeEI19YeaXMCbY6u88Y76GLQ==",
+      "dev": true,
+      "funding": [
+        {
+          "type": "opencollective",
+          "url": "https://opencollective.com/postcss/"
+        },
+        {
+          "type": "tidelift",
+          "url": "https://tidelift.com/funding/github/npm/postcss"
+        },
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/ai"
+        }
+      ],
+      "dependencies": {
+        "nanoid": "^3.3.7",
+        "picocolors": "^1.1.0",
+        "source-map-js": "^1.2.1"
+      },
+      "engines": {
+        "node": "^10 || ^12 || >=14"
+      }
+    },
+    "node_modules/rollup": {
+      "version": "3.29.5",
+      "resolved": "https://registry.npmjs.org/rollup/-/rollup-3.29.5.tgz",
+      "integrity": "sha512-GVsDdsbJzzy4S/v3dqWPJ7EfvZJfCHiDqe80IyrF59LYuP+e6U1LJoUqeuqRbwAWoMNoXivMNeNAOf5E22VA1w==",
+      "dev": true,
+      "bin": {
+        "rollup": "dist/bin/rollup"
+      },
+      "engines": {
+        "node": ">=14.18.0",
+        "npm": ">=8.0.0"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.2"
+      }
+    },
+    "node_modules/source-map-js": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "dev": true,
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "node_modules/typescript": {
+      "version": "5.6.3",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.6.3.tgz",
+      "integrity": "sha512-hjcS1mhfuyi4WW8IWtjP7brDrG2cuDZukyrYrSauoXGNgx0S7zceP07adYkJycEr56BOUTNPzbInooiN3fn1qw==",
+      "dev": true,
+      "bin": {
+        "tsc": "bin/tsc",
+        "tsserver": "bin/tsserver"
+      },
+      "engines": {
+        "node": ">=14.17"
+      }
+    },
+    "node_modules/vite": {
+      "version": "4.5.5",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-4.5.5.tgz",
+      "integrity": "sha512-ifW3Lb2sMdX+WU91s3R0FyQlAyLxOzCSCP37ujw0+r5POeHPwe6udWVIElKQq8gk3t7b8rkmvqC6IHBpCff4GQ==",
+      "dev": true,
+      "dependencies": {
+        "esbuild": "^0.18.10",
+        "postcss": "^8.4.27",
+        "rollup": "^3.27.1"
+      },
+      "bin": {
+        "vite": "bin/vite.js"
+      },
+      "engines": {
+        "node": "^14.18.0 || >=16.0.0"
+      },
+      "funding": {
+        "url": "https://github.com/vitejs/vite?sponsor=1"
+      },
+      "optionalDependencies": {
+        "fsevents": "~2.3.2"
+      },
+      "peerDependencies": {
+        "@types/node": ">= 14",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.4.0"
+      },
+      "peerDependenciesMeta": {
+        "@types/node": {
+          "optional": true
+        },
+        "less": {
+          "optional": true
+        },
+        "lightningcss": {
+          "optional": true
+        },
+        "sass": {
+          "optional": true
+        },
+        "stylus": {
+          "optional": true
+        },
+        "sugarss": {
+          "optional": true
+        },
+        "terser": {
+          "optional": true
+        }
+      }
+    }
+  }
+}
+            ```
+
+            package.json
+            Content:
+            ```
+File: examples/recorder-crx/package.json
+
+{
+  "name": "recorder-crx",
+  "version":"0.10.0",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "build": "tsc && vite build && vite --config vite.recorder.config.ts build"
+  },
+  "dependencies": {
+    "playwright-crx":"0.10.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.3",
+    "vite": "^4.3.9"
+  }
+}
+            ```
+
+            vite.recorder.config.ts
+            Content:
+            ```
+File: examples/recorder-crx/vite.recorder.config.ts
+
+import path from 'path';
+import recorderConfig from '../../playwright/packages/recorder/vite.config';
+import type { UserConfig } from 'vite';
+import { defineConfig } from 'vite';
+import assert from 'assert';
+const userRecorderConfig = recorderConfig as UserConfig;
+export default defineConfig({
+  ...userRecorderConfig,
+  plugins: [
+    ...userRecorderConfig.plugins!,
+    {
+      name: 'playwright-bundle',
+      transformIndexHtml: {
+        order: 'pre',
+        handler: (html) => {
+          const result = html.replace(`<script type="module" src="/src/index.tsx"></script>`, `
+          <script type="module" src="../../../examples/recorder-crx/src/contentscript.ts"></script>
+          <script type="module" src="/src/index.tsx"></script>
+          `);
+          assert(html !== result, 'html should have been changed');
+          return result;
+        }
+      },
+    }
+  ],
+  base: './',
+  root: '../../playwright/packages/recorder',
+  build: {
+    ...userRecorderConfig.build,
+    emptyOutDir: false,
+    outDir: path.resolve(__dirname, './dist'),
+  },
+  optimizeDeps: {
+    include: [
+      path.resolve(__dirname, './src/contentscript.ts'),
+    ],
+  },
+});
+            ```
+
+            tsconfig.json
+            Content:
+            ```
+File: examples/recorder-crx/tsconfig.json
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+  },
+  "include": ["src"]
+}
+            ```
+
+            options.html
+            Content:
+            ```
+File: examples/recorder-crx/options.html
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playwright CRX - Configuration</title>
+  </head>
+  <body>
+    <form id="options-form">
+      <label for="target-language">Default language:</label>
+      <select id="target-language" name="target-language">
+        <optgroup label="Node.js">
+          <option value="javascript">Library</option>
+          <option value="playwright-test">Test Runner</option>
+        </optgroup>
+        <optgroup label="Java">
+          <option value="java-junit">JUnit</option>
+          <option value="java">Library</option>
+        </optgroup>
+        <optgroup label="Python">
+          <option value="python-pytest">Pytest</option>
+          <option value="python">Library</option>
+          <option value="python-async">Library Async</option>
+        </optgroup>
+        <optgroup label=".NET C#">
+          <option value="csharp-mstest">MSTest</option>
+          <option value="csharp-nunit">NUnit</option>
+          <option value="csharp">Library</option>
+        </optgroup>
+      </select>
+      <label for="test-id">TestID Attribute Name:</label>
+      <input type="text" id="test-id" name="test-id" placeholder="Enter Attribute Name" pattern="[a-zA-Z][\w\-]*" title="Must be a valid attribute name">
+      <div>
+        <label for="sidepanel" class="row">Open in Side Panel:</label>
+        <input type="checkbox" id="sidepanel" name="sidepanel">
+      </div>
+      <button id="submit" type="submit">Save</button>
+    </form>
+    <script type="module" src="/src/options.ts"></script>
+  </body>
+</html>
+            ```
+
+            vite.config.ts
+            Content:
+            ```
+File: examples/recorder-crx/vite.config.ts
+
+import path from 'path';
+import { defineConfig } from 'vite';
+import sourcemaps from 'rollup-plugin-sourcemaps';
+export default defineConfig({
+  build: {
+    emptyOutDir: false,
+    minify: false,
+    chunkSizeWarningLimit: 10240,
+    sourcemap: true,
+    rollupOptions: {
+      plugins: [sourcemaps()],
+      input: {
+        'background': path.resolve(__dirname, 'src/background.ts'),
+        'options': path.resolve(__dirname, 'options.html'),
+      },
+      output: {
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name].[ext]',
+      },
+    },
+  },
+});
+            ```
+
+            public/
+                manifest.json
+                Content:
+                ```
+File: examples/recorder-crx/public/manifest.json
+
+{
+  "name": "Playwright CRX",
+  "version": "0.10.0",
+  "manifest_version": 3,
+  "icons": {
+    "16": "icon-16x16.png",
+    "32": "icon-32x32.png",
+    "48": "icon-48x48.png",
+    "128": "icon-192x192.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon-16x16.png",
+      "32": "icon-32x32.png"
+    },
+    "default_title": "Record"
+  },
+  "commands": {
+    "record": {
+      "suggested_key": {
+        "default": "Shift+Alt+R"
+      },
+      "description": "Start recording"
+    },
+    "inspect": {
+      "suggested_key": {
+        "default": "Shift+Alt+C"
+      },
+      "description": "Start inspecting"
+    }
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "permissions": ["debugger", "tabs", "contextMenus", "storage", "sidePanel"]
+}
+                ```
+
+            src/
+                contentscript.ts
+                Content:
+                ```
+File: examples/recorder-crx/src/contentscript.ts
+
+window.addEventListener('load', () => {
+  if (typeof chrome === 'undefined' || !chrome.runtime)
+    return;
+  const wnd: any = window;
+  const port = chrome.runtime.connect();
+  const dispatch = async (data: any) => {
+    port.postMessage({ type: 'recorderEvent', ...data });
+  };
+  wnd.dispatch = dispatch;
+  const onMessage = (msg: any) => {
+    if (!('type' in msg) || msg.type !== 'recorder') return;
+    switch (msg.method) {
+      case 'setPaused': wnd.playwrightSetPaused(msg.paused); break;
+      case 'setMode': wnd.playwrightSetMode(msg.mode); break;
+      case 'setSources': wnd.playwrightSetSources(msg.sources); break;
+      case 'updateCallLogs': wnd.playwrightUpdateLogs(msg.callLogs); break;
+      case 'setSelector': wnd.playwrightSetSelector(msg.selector, msg.userGesture); break;
+      case 'setFile': wnd.playwrightSetFile(msg.file); break;
+    }
+  };
+  port.onMessage.addListener(onMessage);
+});
+                ```
+
+                background.ts
+                Content:
+                ```
+File: examples/recorder-crx/src/background.ts
+
+import type { CrxApplication } from 'playwright-crx';
+import playwright, { crx, _debug, _setUnderTest } from 'playwright-crx';
+type Mode = 'none' | 'recording' | 'inspecting' | 'assertingText' | 'recording-inspecting' | 'standby' | 'assertingVisibility' | 'assertingValue';
+const stoppedModes = ['none', 'standby', 'detached'];
+const recordingModes = ['recording', 'assertingText', 'assertingVisibility', 'assertingValue'];
+let crxAppPromise: Promise<CrxApplication> | undefined;
+const attachedTabIds = new Set<number>();
+let currentMode: Mode | 'detached' | undefined;
+let language: string | undefined;
+let sidepanel = true;
+async function changeAction(tabId: number, mode?: Mode | 'detached') {
+  if (!mode) {
+    mode = attachedTabIds.has(tabId) ? currentMode : 'detached';
+  } else if (mode !== 'detached') {
+    currentMode = mode;
+  }
+  if (!mode || stoppedModes.includes(mode)) {
+    await Promise.all([
+      chrome.action.setTitle({ title: mode === 'none' ? 'Stopped' : 'Record', tabId }),
+      chrome.action.setBadgeText({ text: '', tabId }),
+    ]).catch(() => {});
+    return;
+  }
+  const { text, title, color, bgColor } = recordingModes.includes(mode) ?
+    { text: 'REC', title: 'Recording', color: 'white', bgColor: 'darkred' } :
+    { text: 'INS', title: 'Inspecting', color: 'white', bgColor: 'dodgerblue' };
+  await Promise.all([
+    chrome.action.setTitle({ title, tabId }),
+    chrome.action.setBadgeText({ text, tabId }),
+    chrome.action.setBadgeTextColor({ color, tabId }),
+    chrome.action.setBadgeBackgroundColor({ color: bgColor, tabId }),
+  ]).catch(() => {});
+}
+chrome.tabs.onUpdated.addListener(tabId => changeAction(tabId));
+async function getCrxApp() {
+  if (!crxAppPromise) {
+    const { testIdAttributeName, targetLanguage } = await chrome.storage.sync.get(['testIdAttributeName', 'targetLanguage']);
+    crxAppPromise = crx.start().then(crxApp => {
+      crxApp.recorder.addListener('hide', async () => {
+        await crxApp.detachAll();
+      });
+      crxApp.recorder.addListener('modechanged', async ({ mode }) => {
+        await Promise.all([...attachedTabIds].map(tabId => changeAction(tabId, mode)));
+      });
+      crxApp.addListener('attached', async ({ tabId }) => {
+        attachedTabIds.add(tabId);
+        await changeAction(tabId, crxApp.recorder.mode);
+      });
+      crxApp.addListener('detached', async tabId => {
+        attachedTabIds.delete(tabId);
+        await changeAction(tabId, 'detached');
+      });
+      if (!testIdAttributeName)
+        setTestIdAttributeName(testIdAttributeName);
+      if (!language && targetLanguage)
+        language = targetLanguage;
+      return crxApp;
+    });
+  }
+  return await crxAppPromise;
+}
+async function attach(tab: chrome.tabs.Tab, mode?: Mode) {
+  if (!tab?.id || (attachedTabIds.has(tab.id) && !mode)) return;
+  const tabId = tab.id;
+  if (sidepanel)
+    chrome.sidePanel.open({ windowId: tab.windowId });
+  chrome.action.disable();
+  const crxApp = await getCrxApp();
+  try {
+    if (crxApp.recorder.isHidden()) {
+      await crxApp.recorder.show({
+        mode: mode ?? 'recording',
+        language,
+        window: { type: sidepanel ? 'sidepanel' : 'popup', url: 'index.html' },
+      });
+    }
+    await crxApp.attach(tabId);
+    if (mode)
+      await crxApp.recorder.setMode(mode);
+  } catch (e) {
+    await crxApp.newPage();
+  } finally {
+    chrome.action.enable();
+  }
+}
+async function setTestIdAttributeName(testIdAttributeName: string) {
+  playwright.selectors.setTestIdAttribute(testIdAttributeName);
+}
+chrome.action.onClicked.addListener(attach);
+chrome.contextMenus.create({
+  id: 'pw-recorder',
+  title: 'Attach to Playwright Recorder',
+  contexts: ['all'],
+});
+chrome.contextMenus.onClicked.addListener(async (_, tab) => {
+  if (tab) await attach(tab);
+});
+chrome.storage.sync.get(['sidepanel']).then(({ sidepanel: value }) => {
+  if (value !== undefined)
+    sidepanel = value;
+});
+chrome.storage.sync.onChanged.addListener(async ({ testIdAttributeName, targetLanguage, sidepanel: sidepanelChange }) => {
+  if (testIdAttributeName)
+    await setTestIdAttributeName(testIdAttributeName.newValue);
+  if (targetLanguage)
+    language = targetLanguage.newValue;
+  if (sidepanelChange.newValue !== undefined)
+    sidepanel = sidepanelChange.newValue;
+});
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (!tab.id) return;
+  if (command === 'inspect')
+    await attach(tab, 'inspecting');
+  else if (command === 'record')
+    await attach(tab, 'recording');
+});
+Object.assign(self, { attach, setTestIdAttributeName, _debug, _setUnderTest });
+                ```
+
+                options.css
+                Content:
+                ```
+File: examples/recorder-crx/src/options.css
+
+body {
+  font-family: sans-serif;
+  margin: 20px;
+}
+h1 {
+  text-align: center;
+  margin-bottom: 15px;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+label {
+  font-weight: bold;
+}
+input[type="text"], select {
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+input[type="checkbox"] {
+  padding-left: 16px;
+}
+button[type="submit"] {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s ease-in-out;
+}
+button:hover {
+  background-color: #45A049;
+}
+button[type="submit"]:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
+                ```
+
+                options.ts
+                Content:
+                ```
+File: examples/recorder-crx/src/options.ts
+
+import './options.css';
+async function initialize() {
+  const formElem = document.getElementById('options-form') as HTMLFormElement;
+  const languageElem = document.getElementById('target-language') as HTMLSelectElement;
+  const testIdAttributeNameElem = document.getElementById('test-id') as HTMLInputElement;
+  const sidepanelElem = document.getElementById('sidepanel') as HTMLInputElement;
+  const submitElem = document.getElementById('submit') as HTMLButtonElement;
+  if (!testIdAttributeNameElem || !formElem || !submitElem) return;
+  testIdAttributeNameElem.addEventListener('input', () => {
+    submitElem.disabled = false;
+  });
+  languageElem.addEventListener('change', () => {
+    submitElem.disabled = false;
+  });
+  sidepanelElem.addEventListener('change', () => {
+    submitElem.disabled = false;
+  });
+  formElem.addEventListener('submit', (e) => {
+    if (!formElem.reportValidity()) return;
+    e.preventDefault();
+    submitElem.disabled = true;
+    const testIdAttributeName = testIdAttributeNameElem.value;
+    const targetLanguage = languageElem.value;
+    const sidepanel = sidepanelElem.checked;
+    chrome.storage.sync.set({ testIdAttributeName, targetLanguage, sidepanel }).catch(() => {});
+    return false;
+  });
+  submitElem.disabled = true;
+  const { testIdAttributeName, targetLanguage, sidepanel } = await chrome.storage.sync.get(['testIdAttributeName', 'targetLanguage', 'sidepanel']);
+  testIdAttributeNameElem.value = testIdAttributeName ?? 'data-testid';
+  languageElem.value = targetLanguage ?? 'javascript';
+  sidepanelElem.checked = sidepanel === undefined || sidepanel;
+}
+initialize();
+                ```
+
+    .git/
+        .DS_Store
+        Error reading file: 'utf-8' codec can't decode byte 0xd9 in position 1065: invalid continuation byte
+
+        config
+        Content:
+        ```
+File: .git/config
+
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = https://github.com/Nfloop/playwright-crx-testing-dummy.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
+	vscode-merge-base = origin/main
+        ```
+
+        HEAD
+        Content:
+        ```
+File: .git/HEAD
+
+ref: refs/heads/main
+        ```
+
+        description
+        Content:
+        ```
+File: .git/description
+
+Unnamed repository; edit this file 'description' to name the repository.
+        ```
+
+        index
+        Error reading file: 'utf-8' codec can't decode byte 0xd7 in position 15: invalid continuation byte
+
+        packed-refs
+        Content:
+        ```
+File: .git/packed-refs
+
+ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 refs/remotes/origin/main
+        ```
+
+        COMMIT_EDITMSG
+        Content:
+        ```
+File: .git/COMMIT_EDITMSG
+
+1
+        ```
+
+        FETCH_HEAD
+        Content:
+        ```
+File: .git/FETCH_HEAD
+
+bfb046ed97199906cdb2fc20f2187485ca03901c		branch 'main' of https://github.com/Nfloop/playwright-crx-testing-dummy
+        ```
+
+        objects/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x86 in position 27: invalid start byte
+
+            0d/
+                0e8bb81c7a9580c2f574ad3b45f1d741f4948e
+                Error reading file: 'utf-8' codec can't decode byte 0xcd in position 2: invalid continuation byte
+
+            92/
+                80db5cff46b80b9f0680e30344816a96654a6e
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            68/
+                865b15fee00ee1f0f00fec2710c2443a7de455
+                Error reading file: 'utf-8' codec can't decode byte 0xb6 in position 8: invalid start byte
+
+            6f/
+                177a6a892cce18867cf4109530c060bfadbfdb
+                Error reading file: 'utf-8' codec can't decode byte 0x94 in position 3: invalid start byte
+
+            56/
+                a879d59613c279af2ecb070854ae219d02adc8
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            93/
+                45ab2c2cf682006b9382a2a760aada5595e6d5
+                Error reading file: 'utf-8' codec can't decode byte 0xce in position 3: invalid continuation byte
+
+            33/
+                a33000d64bee50fe88f5e681dcb89ff08b6236
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+                900fce72f83eec24d985b5355266f2294f8a9e
+                Error reading file: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte
+
+            d9/
+                50d11720048a7df6a03a4d3ec5216290e731cf
+                Error reading file: 'utf-8' codec can't decode byte 0xd5 in position 2: invalid continuation byte
+
+            ad/
+                f1c698d976974f367dd0af64d24d1f43e45c4b
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            d0/
+                e72997992e2dd898b9ac20ca0b0f771a13c126
+                Error reading file: 'utf-8' codec can't decode byte 0xe5 in position 2: invalid continuation byte
+
+            be/
+                114bd1141fc1c4f1320c34fbc315dc7236dfb5
+                Error reading file: 'utf-8' codec can't decode byte 0xd5 in position 2: invalid continuation byte
+
+            bd/
+                e0afad56d446fc06b34a415f11f7c444b2c038
+                Error reading file: 'utf-8' codec can't decode bytes in position 2-3: invalid continuation byte
+
+            c0/
+                d076f51c645e31fc801476b3ab967bf94eec43
+                Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte
+
+                4c9ded242e98358abf69cb3399604e5fa4b64d
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 9: invalid continuation byte
+
+            ee/
+                d0f7ec117934407fb7be2be75254d0f51eb855
+                Error reading file: 'utf-8' codec can't decode byte 0x8d in position 2: invalid start byte
+
+            cf/
+                2dc499288996832f8a17e0f467f1a5dca01572
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+            c6/
+                876d82b2736bf55021f6c02322147f33722b4e
+                Error reading file: 'utf-8' codec can't decode byte 0x8d in position 2: invalid start byte
+
+            4e/
+                d286b07467867b358863169ece7732df598dff
+                Error reading file: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte
+
+                47ac6a578a1b03b51266252035bab7151e6ab6
+                Error reading file: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte
+
+            18/
+                e9520d3941d5a9f2c4c4819a97c0d9ce67ee82
+                Error reading file: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte
+
+                9a355b3b51585242ab6307ca231ddbe0f5748e
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            4b/
+                cf2461c850e43958855926d8f87bb78c9c6ca4
+                Error reading file: 'utf-8' codec can't decode byte 0x8f in position 3: invalid start byte
+
+                addc9cc09cb3ca24524e21684fd2834e72720c
+                Error reading file: 'utf-8' codec can't decode byte 0xaa in position 20: invalid start byte
+
+            pack/
+                pack-20a6b483c89533be092daf2cac61104324c2d04d.pack
+                Error reading file: 'utf-8' codec can't decode byte 0xa8 in position 12: invalid start byte
+
+                pack-20a6b483c89533be092daf2cac61104324c2d04d.idx
+                Error reading file: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+            89/
+                0c43560f3d53c7f9cbb0fc2cca6e96aa6e88b7
+                Error reading file: 'utf-8' codec can't decode byte 0x8b in position 5: invalid start byte
+
+            1f/
+                8c21a50e75f6edb29133e04fc2f63bd73e2fe6
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+                ae662282c1e287bc462a8a0783d3d8f392fbe2
+                Error reading file: 'utf-8' codec can't decode byte 0xaa in position 20: invalid start byte
+
+            73/
+                21fb4099326fb4ba4a62083229e55574c407f8
+                Error reading file: 'utf-8' codec can't decode byte 0xda in position 6: invalid continuation byte
+
+            26/
+                dca1b6937445291c0e8b67a2a210b89440deee
+                Error reading file: 'utf-8' codec can't decode byte 0x8d in position 3: invalid start byte
+
+            86/
+                a007f87a74f4c558255a95c513316f7494bce5
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            6b/
+                b9780f4d3d871bc75497b30e18df09ded434f1
+                Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte
+
+            07/
+                abf64170b72ea5e2376d2cd74c277dd7da203d
+                Error reading file: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte
+
+            38/
+                8c44ec7125a9430eb3b732a8e436d0950c3ffb
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+            9a/
+                16da3d72601100c1f9a3a22e8e07312c232795
+                Error reading file: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte
+
+            36/
+                c48aa2c6d4612988702c4e88e8b8a171b3ca73
+                Error reading file: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte
+
+            5d/
+                59764bbe348c1d5a998d4d217c6a3c204c6734
+                Error reading file: 'utf-8' codec can't decode byte 0xb5 in position 8: invalid start byte
+
+            31/
+                6c4f6242edf843d458766a876d306b705109af
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            info/
+            54/
+                ebe71af7f159858d3a41459c77c8a4f7d7707f
+                Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte
+
+            98/
+                e0232127500468ba142590b1ab08f4a21674b3
+                Error reading file: 'utf-8' codec can't decode byte 0x8d in position 3: invalid start byte
+
+            30/
+                4e1ed90a41ea425d20b8193222c3724b25e733
+                Error reading file: 'utf-8' codec can't decode byte 0xb6 in position 8: invalid start byte
+
+            06/
+                09155936f88c934f7816d198398bf3410f9f00
+                Error reading file: 'utf-8' codec can't decode byte 0xb5 in position 2: invalid start byte
+
+            52/
+                3419b3fa4d9e7e99c4d45423e7bb5395dd5665
+                Error reading file: 'utf-8' codec can't decode byte 0xb0 in position 7: invalid start byte
+
+            0a/
+                e6bde59071d30b84079d986ba7b1ba1c450c4a
+                Error reading file: 'utf-8' codec can't decode byte 0x8d in position 2: invalid start byte
+
+            64/
+                c0023936ea3cd50d2af5aca7403106f3dcaacc
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+            90/
+                42eef513cd965f8f63b5fe8daf1a9f5bcd2c91
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            bf/
+                b046ed97199906cdb2fc20f2187485ca03901c
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+            b8/
+                0d76be1d2c9ac54bea394eba400eb186090de3
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            a9/
+                99ddd5398a1b9b621241527a466ca60de3f93f
+                Error reading file: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte
+
+            aa/
+                746b18da97165b1db727fe0b299d5bd422241c
+                Error reading file: 'utf-8' codec can't decode byte 0xb7 in position 8: invalid start byte
+
+            b0/
+                0c36ad01a294a9657f82dedda5cdf2a659dc14
+                Error reading file: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte
+
+            cc/
+                5013e9822eaab82ae1d37940a9c8801e6ba5da
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            fa/
+                9869e2f4940053d090286376d2289baadf7fd1
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            f1/
+                8ac698e9bc232af915fedfc726c6b26888f730
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            77/
+                4892de5d0d263e97995bec29789063e8e7bd7a
+                Error reading file: 'utf-8' codec can't decode byte 0xaa in position 19: invalid start byte
+
+            84/
+                9d14d590bf2f9dc13a6f08c63e35a0bfdccf32
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            4a/
+                a6a96283cfb6a2e6e37f7de679d5a78f1bfb2b
+                Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte
+
+            24/
+                d2d36d3de328ea02d5116a28dae2120440b1d4
+                Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte
+
+            1d/
+                1615b241112ef5f2f1a9ba891ff2781c222256
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            82/
+                9d8badbb1a5e0fe859ae0ce5f3723100c1b8c7
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            49/
+                86a4145d573b48bd898af4b2486e4f6d0f66cf
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            40/
+                a6c1575da253dd75dc1011d8782e7fe646f2b1
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+                a17d83debcf54fada3abd8f30a804b4583ab0d
+                Error reading file: 'utf-8' codec can't decode byte 0xed in position 2: invalid continuation byte
+
+            47/
+                e269ddee5bff55d309f5e148bb8debf20976c1
+                Error reading file: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte
+
+            8b/
+                200e3b8bbedfd52ea032c8e79d365ccc2f732e
+                Error reading file: 'utf-8' codec can't decode byte 0xcd in position 2: invalid continuation byte
+
+            25/
+                9c9b79f5ded68c0883b89c3f2250e98affc901
+                Error reading file: 'utf-8' codec can't decode byte 0xce in position 21: invalid continuation byte
+
+        info/
+            exclude
+        logs/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x87 in position 23: invalid start byte
+
+            HEAD
+            Content:
+            ```
+File: .git/logs/HEAD
+
+0000000000000000000000000000000000000000 ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731072948 +0530	clone: from https://github.com/Nfloop/playwright-crx-testing-dummy.git
+ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 bfb046ed97199906cdb2fc20f2187485ca03901c manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731075046 +0530	commit: 1
+            ```
+
+            refs/
+                heads/
+                    main
+                    Content:
+                    ```
+File: .git/logs/refs/heads/main
+
+0000000000000000000000000000000000000000 ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731072948 +0530	clone: from https://github.com/Nfloop/playwright-crx-testing-dummy.git
+ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 bfb046ed97199906cdb2fc20f2187485ca03901c manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731075046 +0530	commit: 1
+                    ```
+
+                remotes/
+                    origin/
+                        HEAD
+                        Content:
+                        ```
+File: .git/logs/refs/remotes/origin/HEAD
+
+0000000000000000000000000000000000000000 ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731072948 +0530	clone: from https://github.com/Nfloop/playwright-crx-testing-dummy.git
+                        ```
+
+                        main
+                        Content:
+                        ```
+File: .git/logs/refs/remotes/origin/main
+
+ce5af5d8e84bfa9c845d55e85e3173fb7fc122d3 bfb046ed97199906cdb2fc20f2187485ca03901c manoj kumar jakkula <jakkulamanojkumar27@gmail.com> 1731075048 +0530	update by push
+                        ```
+
+        hooks/
+            commit-msg.sample
+            Content:
+            ```
+File: .git/hooks/commit-msg.sample
+
+test "" = "$(grep '^Signed-off-by: ' "$1" |
+	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
+	echo >&2 Duplicate Signed-off-by lines.
+	exit 1
+}
+            ```
+
+            pre-rebase.sample
+            Content:
+            ```
+File: .git/hooks/pre-rebase.sample
+
+publish=next
+basebranch="$1"
+if test "$#" = 2
+then
+	topic="refs/heads/$2"
+else
+	topic=`git symbolic-ref HEAD` ||
+	exit 0 ;# we do not interrupt rebasing detached HEAD
+fi
+case "$topic" in
+refs/heads/??/*)
+	;;
+	exit 0 ;# we do not interrupt others.
+	;;
+esac
+git show-ref -q "$topic" || {
+	echo >&2 "No such branch $topic"
+	exit 1
+}
+not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
+if test -z "$not_in_master"
+then
+	echo >&2 "$topic is fully merged to master; better remove it."
+	exit 1 ;# we could allow it, but there is no point.
+fi
+only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
+only_next_2=`git rev-list ^master           ${publish} | sort`
+if test "$only_next_1" = "$only_next_2"
+then
+	not_in_topic=`git rev-list "^$topic" master`
+	if test -z "$not_in_topic"
+	then
+		echo >&2 "$topic is already up to date with master"
+		exit 1 ;# we could allow it, but there is no point.
+	else
+		exit 0
+	fi
+else
+	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
+	/usr/bin/perl -e '
+		my $topic = $ARGV[0];
+		my $msg = "* $topic has commits already merged to public branch:\n";
+		my (%not_in_next) = map {
+			/^([0-9a-f]+) /;
+			($1 => 1);
+		} split(/\n/, $ARGV[1]);
+		for my $elem (map {
+				/^([0-9a-f]+) (.*)$/;
+				[$1 => $2];
+			} split(/\n/, $ARGV[2])) {
+			if (!exists $not_in_next{$elem->[0]}) {
+				if ($msg) {
+					print STDERR $msg;
+					undef $msg;
+				}
+				print STDERR " $elem->[1]\n";
+			}
+		}
+	' "$topic" "$not_in_next" "$not_in_master"
+	exit 1
+fi
+<<\DOC_END
+This sample hook safeguards topic branches that have been
+published from being rewound.
+The workflow assumed here is:
+   merged into it again (either directly or indirectly).
+   it is deleted.  If you need to build on top of it to correct
+   earlier mistakes, a new topic branch is created by forking at
+   the tip of the "master".  This is not strictly necessary, but
+   it makes it easier to keep your history simple.
+   branches, merge them into "next" branch.
+The script, being an example, hardcodes the publish branch name
+to be "next", but it is trivial to make it configurable via
+$GIT_DIR/config mechanism.
+With this workflow, you would want to know:
+(1) ... if a topic branch has ever been merged to "next".  Young
+    topic branches can have stupid mistakes you would rather
+    clean up before publishing, and things that have not been
+    merged into other branches can be easily rebased without
+    affecting other people.  But once it is published, you would
+    not want to rewind it.
+(2) ... if a topic branch has been fully merged to "master".
+    Then you can delete it.  More importantly, you should not
+    build on top of it -- other people may already want to
+    change things related to the topic as patches against your
+    "master", so if you need further changes, it is better to
+    fork the topic (perhaps with the same name) afresh from the
+    tip of "master".
+Let's look at this example:
+		   o---o---o---o---o---o---o---o---o---o "next"
+		  /       /           /           /
+		 /   a---a---b A     /           /
+		/   /               /           /
+	       /   /   c---c---c---c B         /
+	      /   /   /             \         /
+	     /   /   /   b---b C     \       /
+	    /   /   /   /             \     /
+    ---o---o---o---o---o---o---o---o---o---o---o "master"
+A, B and C are topic branches.
+   and is ready to be deleted.
+We would want to allow C to be rebased, refuse A, and encourage
+B to be deleted.
+To compute (1):
+	git rev-list ^master ^topic next
+	git rev-list ^master        next
+	if these match, topic has not merged in next at all.
+To compute (2):
+	git rev-list master..topic
+	if this is empty, it is fully merged to "master".
+DOC_END
+            ```
+
+            pre-commit.sample
+            Content:
+            ```
+File: .git/hooks/pre-commit.sample
+
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+	against=HEAD
+else
+	against=$(git hash-object -t tree /dev/null)
+fi
+allownonascii=$(git config --type=bool hooks.allownonascii)
+exec 1>&2
+if [ "$allownonascii" != "true" ] &&
+	test $(git diff --cached --name-only --diff-filter=A -z $against |
+	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+then
+	cat <<\EOF
+Error: Attempt to add a non-ASCII file name.
+This can cause problems if you want to work with people on other platforms.
+To be portable it is advisable to rename the file.
+If you know what you are doing you can disable this check using:
+  git config hooks.allownonascii true
+EOF
+	exit 1
+fi
+exec git diff-index --check --cached $against --
+            ```
+
+            applypatch-msg.sample
+            Content:
+            ```
+File: .git/hooks/applypatch-msg.sample
+
+. git-sh-setup
+commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
+test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
+:
+            ```
+
+            fsmonitor-watchman.sample
+            Content:
+            ```
+File: .git/hooks/fsmonitor-watchman.sample
+
+use strict;
+use warnings;
+use IPC::Open2;
+my ($version, $last_update_token) = @ARGV;
+if ($version ne 2) {
+	die "Unsupported query-fsmonitor hook version '$version'.\n" .
+	    "Falling back to scanning...\n";
+}
+my $git_work_tree = get_working_dir();
+my $retry = 1;
+my $json_pkg;
+eval {
+	require JSON::XS;
+	$json_pkg = "JSON::XS";
+	1;
+} or do {
+	require JSON::PP;
+	$json_pkg = "JSON::PP";
+};
+launch_watchman();
+sub launch_watchman {
+	my $o = watchman_query();
+	if (is_work_tree_watched($o)) {
+		output_result($o->{clock}, @{$o->{files}});
+	}
+}
+sub output_result {
+	my ($clockid, @files) = @_;
+	binmode STDOUT, ":utf8";
+	print $clockid;
+	print "\0";
+	local $, = "\0";
+	print @files;
+}
+sub watchman_clock {
+	my $response = qx/watchman clock "$git_work_tree"/;
+	die "Failed to get clock id on '$git_work_tree'.\n" .
+		"Falling back to scanning...\n" if $? != 0;
+	return $json_pkg->new->utf8->decode($response);
+}
+sub watchman_query {
+	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
+	or die "open2() failed: $!\n" .
+	"Falling back to scanning...\n";
+	my $last_update_line = "";
+	if (substr($last_update_token, 0, 1) eq "c") {
+		$last_update_token = "\"$last_update_token\"";
+		$last_update_line = qq[\n"since": $last_update_token,];
+	}
+	my $query = <<"	END";
+		["query", "$git_work_tree", {$last_update_line
+			"fields": ["name"],
+			"expression": ["not", ["dirname", ".git"]]
+		}]
+	END
+	print CHLD_IN $query;
+	close CHLD_IN;
+	my $response = do {local $/; <CHLD_OUT>};
+	die "Watchman: command returned no output.\n" .
+	"Falling back to scanning...\n" if $response eq "";
+	die "Watchman: command returned invalid output: $response\n" .
+	"Falling back to scanning...\n" unless $response =~ /^\{/;
+	return $json_pkg->new->utf8->decode($response);
+}
+sub is_work_tree_watched {
+	my ($output) = @_;
+	my $error = $output->{error};
+	if ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {
+		$retry--;
+		my $response = qx/watchman watch "$git_work_tree"/;
+		die "Failed to make watchman watch '$git_work_tree'.\n" .
+		    "Falling back to scanning...\n" if $? != 0;
+		$output = $json_pkg->new->utf8->decode($response);
+		$error = $output->{error};
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+		my $o = watchman_clock();
+		$error = $output->{error};
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+		output_result($o->{clock}, ("/"));
+		$last_update_token = $o->{clock};
+		eval { launch_watchman() };
+		return 0;
+	}
+	die "Watchman: $error.\n" .
+	"Falling back to scanning...\n" if $error;
+	return 1;
+}
+sub get_working_dir {
+	my $working_dir;
+	if ($^O =~ 'msys' || $^O =~ 'cygwin') {
+		$working_dir = Win32::GetCwd();
+		$working_dir =~ tr/\\/\//;
+	} else {
+		require Cwd;
+		$working_dir = Cwd::cwd();
+	}
+	return $working_dir;
+}
+            ```
+
+            pre-receive.sample
+            Content:
+            ```
+File: .git/hooks/pre-receive.sample
+
+if test -n "$GIT_PUSH_OPTION_COUNT"
+then
+	i=0
+	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
+	do
+		eval "value=\$GIT_PUSH_OPTION_$i"
+		case "$value" in
+		echoback=*)
+			echo "echo from the pre-receive-hook: ${value#*=}" >&2
+			;;
+		reject)
+			exit 1
+		esac
+		i=$((i + 1))
+	done
+fi
+            ```
+
+            prepare-commit-msg.sample
+            Content:
+            ```
+File: .git/hooks/prepare-commit-msg.sample
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
+/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+            ```
+
+            post-update.sample
+            Content:
+            ```
+File: .git/hooks/post-update.sample
+
+exec git update-server-info
+            ```
+
+            pre-merge-commit.sample
+            Content:
+            ```
+File: .git/hooks/pre-merge-commit.sample
+
+. git-sh-setup
+test -x "$GIT_DIR/hooks/pre-commit" &&
+        exec "$GIT_DIR/hooks/pre-commit"
+:
+            ```
+
+            pre-applypatch.sample
+            Content:
+            ```
+File: .git/hooks/pre-applypatch.sample
+
+. git-sh-setup
+precommit="$(git rev-parse --git-path hooks/pre-commit)"
+test -x "$precommit" && exec "$precommit" ${1+"$@"}
+:
+            ```
+
+            pre-push.sample
+            Content:
+            ```
+File: .git/hooks/pre-push.sample
+
+remote="$1"
+url="$2"
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+while read local_ref local_oid remote_ref remote_oid
+do
+	if test "$local_oid" = "$zero"
+	then
+		:
+	else
+		if test "$remote_oid" = "$zero"
+		then
+			range="$local_oid"
+		else
+			range="$remote_oid..$local_oid"
+		fi
+		commit=$(git rev-list -n 1 --grep '^WIP' "$range")
+		if test -n "$commit"
+		then
+			echo >&2 "Found WIP commit in $local_ref, not pushing"
+			exit 1
+		fi
+	fi
+done
+exit 0
+            ```
+
+            update.sample
+            Content:
+            ```
+File: .git/hooks/update.sample
+
+refname="$1"
+oldrev="$2"
+newrev="$3"
+if [ -z "$GIT_DIR" ]; then
+	echo "Don't run this script from the command line." >&2
+	echo " (if you want, you could supply GIT_DIR then run" >&2
+	echo "  $0 <ref> <oldrev> <newrev>)" >&2
+	exit 1
+fi
+if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+	exit 1
+fi
+allowunannotated=$(git config --type=bool hooks.allowunannotated)
+allowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)
+denycreatebranch=$(git config --type=bool hooks.denycreatebranch)
+allowdeletetag=$(git config --type=bool hooks.allowdeletetag)
+allowmodifytag=$(git config --type=bool hooks.allowmodifytag)
+projectdesc=$(sed -e '1q' "$GIT_DIR/description")
+case "$projectdesc" in
+"Unnamed repository"* | "")
+	echo "*** Project description file hasn't been set" >&2
+	exit 1
+	;;
+esac
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+if [ "$newrev" = "$zero" ]; then
+	newrev_type=delete
+else
+	newrev_type=$(git cat-file -t $newrev)
+fi
+case "$refname","$newrev_type" in
+	refs/tags/*,commit)
+		short_refname=${refname##refs/tags/}
+		if [ "$allowunannotated" != "true" ]; then
+			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
+			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,delete)
+		if [ "$allowdeletetag" != "true" ]; then
+			echo "*** Deleting a tag is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,tag)
+		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
+		then
+			echo "*** Tag '$refname' already exists." >&2
+			echo "*** Modifying a tag is not allowed in this repository." >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,commit)
+		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+			echo "*** Creating a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,delete)
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/remotes/*,commit)
+		;;
+	refs/remotes/*,delete)
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
+		exit 1
+		;;
+esac
+exit 0
+            ```
+
+            push-to-checkout.sample
+            Content:
+            ```
+File: .git/hooks/push-to-checkout.sample
+
+commit=$1
+die () {
+	echo >&2 "$*"
+	exit 1
+}
+if ! git update-index -q --ignore-submodules --refresh
+then
+	die "Up-to-date check failed"
+fi
+if ! git diff-files --quiet --ignore-submodules --
+then
+	die "Working directory has unstaged changes"
+fi
+if git cat-file -e HEAD 2>/dev/null
+then
+	head=HEAD
+else
+	head=$(git hash-object -t tree --stdin </dev/null)
+fi
+if ! git diff-index --quiet --cached --ignore-submodules $head --
+then
+	die "Working directory has staged changes"
+fi
+if ! git read-tree -u -m "$commit"
+then
+	die "Could not update working tree to new HEAD"
+fi
+            ```
+
+        refs/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x90 in position 580: invalid start byte
+
+            heads/
+                main
+                Content:
+                ```
+File: .git/refs/heads/main
+
+bfb046ed97199906cdb2fc20f2187485ca03901c
+                ```
+
+            tags/
+            remotes/
+                origin/
+                    HEAD
+                    Content:
+                    ```
+File: .git/refs/remotes/origin/HEAD
+
+ref: refs/remotes/origin/main
+                    ```
+
+                    main
+                    Content:
+                    ```
+File: .git/refs/remotes/origin/main
+
+bfb046ed97199906cdb2fc20f2187485ca03901c
+                    ```
+
+    src/
+        .DS_Store
+        Error reading file: 'utf-8' codec can't decode byte 0x85 in position 1097: invalid start byte
+
+        test.ts
+        Content:
+        ```
+File: src/test.ts
+
+export * from '.';
+export { expect, test } from '@playwright/test/lib/index';
+        ```
+
+        index.ts
+        Content:
+        ```
+File: src/index.ts
+
+import './shims/global';
+import './protocol/validator';
+import { DispatcherConnection, RootDispatcher } from 'playwright-core/lib/server';
+import { CrxConnection } from './client/crxConnection';
+import type { CrxPlaywright as CrxPlaywrightAPI } from './client/crxPlaywright';
+import { CrxPlaywright } from './server/crxPlaywright';
+import { CrxPlaywrightDispatcher } from './server/dispatchers/crxPlaywrightDispatcher';
+import { PageBinding } from 'playwright-core/lib/server/page';
+export { debug as _debug } from 'debug';
+export { setUnderTest as _setUnderTest } from 'playwright-core/lib/utils';
+PageBinding.kPlaywrightBinding = '__crx__binding__';
+const playwright = new CrxPlaywright();
+const clientConnection = new CrxConnection();
+const dispatcherConnection = new DispatcherConnection(true );
+dispatcherConnection.onmessage = message => clientConnection.dispatch(message);
+clientConnection.onmessage = message => dispatcherConnection.dispatch(message);
+const rootScope = new RootDispatcher(dispatcherConnection);
+new CrxPlaywrightDispatcher(rootScope, playwright);
+const playwrightAPI = clientConnection.getObjectWithKnownName('Playwright') as CrxPlaywrightAPI;
+dispatcherConnection.onmessage = message => setImmediate(() => clientConnection.dispatch(message));
+clientConnection.onmessage = message => setImmediate(() => dispatcherConnection.dispatch(message));
+clientConnection.toImpl = (x: any) => x ? dispatcherConnection._dispatchers.get(x._guid)!._object : dispatcherConnection._dispatchers.get('');
+(playwrightAPI as any)._toImpl = clientConnection.toImpl;
+export const { _crx: crx } = playwrightAPI;
+export default playwrightAPI;
+        ```
+
+        types/
+            types.d.ts
+            Content:
+            ```
+File: src/types/types.d.ts
+
+import { Page, BrowserContext } from '../../playwright/packages/playwright-core/types/types';
+export * from '../../playwright/packages/playwright-core/types/types';
+export interface Crx {
+  start(options?: {
+    slowMo?: number;
+  }): Promise<CrxApplication>;
+}
+export interface CrxApplication {
+  on(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  on(event: 'detached', listener: (number: number) => void): this;
+  once(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  once(event: 'detached', listener: (number: number) => void): this;
+  addListener(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  addListener(event: 'detached', listener: (number: number) => void): this;
+  removeListener(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  removeListener(event: 'detached', listener: (number: number) => void): this;
+  off(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  off(event: 'detached', listener: (number: number) => void): this;
+  prependListener(event: 'attached', listener: (data: {
+    page: Page;
+    tabId: number;
+  }) => void): this;
+  prependListener(event: 'detached', listener: (number: number) => void): this;
+  attach(tabId: number): Promise<Page>;
+  attachAll(options?: {
+    active?: null|boolean;
+    audible?: null|boolean;
+    autoDiscardable?: null|boolean;
+    currentWindow?: null|boolean;
+    discarded?: null|boolean;
+    groupId?: null|number;
+    highlighted?: null|boolean;
+    index?: null|number;
+    lastFocusedWindow?: null|boolean;
+    muted?: null|boolean;
+    pinned?: null|boolean;
+    status?: null|"loading"|"complete"|"serial";
+    title?: null|string;
+    url?: null|string|Array<string>;
+    windowId?: null|number;
+    windowType?: null|"normal"|"popup"|"panel"|"app"|"devtools";
+  }): Promise<Array<Page>>;
+  close(): Promise<void>;
+  context(): BrowserContext;
+  detach(tabIdOrPage: number|Page): Promise<void>;
+  detachAll(): Promise<void>;
+  newPage(options?: {
+    active?: null|boolean;
+    index?: null|number;
+    openerTabId?: null|number;
+    pinned?: null|boolean;
+    selected?: null|boolean;
+    url?: null|string;
+    windowId?: null|number;
+  }): Promise<Page>;
+  pages(): Array<Page>;
+  recorder: CrxRecorder;
+}
+export interface CrxRecorder {
+  on(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  on(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+  on(event: 'modechanged', listener: (data: {
+    mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  }) => void): this;
+  once(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  once(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+  once(event: 'modechanged', listener: (data: {
+    mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  }) => void): this;
+  addListener(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  addListener(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+    addListener(event: 'modechanged', listener: (data: {
+      mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+    }) => void): this;
+  removeListener(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  removeListener(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+  removeListener(event: 'modechanged', listener: (data: {
+    mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  }) => void): this;
+  off(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  off(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+  off(event: 'modechanged', listener: (data: {
+    mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  }) => void): this;
+  prependListener(event: 'hide', listener: (crxRecorder: CrxRecorder) => void): this;
+  prependListener(event: 'show', listener: (crxRecorder: CrxRecorder) => void): this;
+  prependListener(event: 'modechanged', listener: (data: {
+    mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  }) => void): this;
+  hide(): Promise<void>;
+  isHidden(): boolean;
+  show(options?: {
+    language?: null|string;
+    mode?: null|"none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+    testIdAttributeName?: null|string;
+    window?: {
+      type?: null|"popup"|"sidepanel";
+      url?: null|string;
+    };
+  }): Promise<void>;
+  mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue";
+  setMode(mode: "none"|"recording"|"inspecting"|"assertingText"|"recording-inspecting"|"standby"|"assertingVisibility"|"assertingValue"): Promise<void>;
+}
+            ```
+
+        server/
+            crx.ts
+            Content:
+            ```
+File: src/server/crx.ts
+
+import type * as channels from '@protocol/channels';
+import { RecentLogsCollector } from 'playwright-core/lib/utils/debugLogger';
+import type { BrowserOptions, BrowserProcess } from 'playwright-core/lib/server/browser';
+import { CRBrowser } from 'playwright-core/lib/server/chromium/crBrowser';
+import type { CRPage } from 'playwright-core/lib/server/chromium/crPage';
+import { helper } from 'playwright-core/lib/server/helper';
+import { SdkObject } from 'playwright-core/lib/server/instrumentation';
+import { Page } from 'playwright-core/lib/server/page';
+import type { Playwright } from 'playwright-core/lib/server/playwright';
+import { Recorder } from 'playwright-core/lib/server/recorder';
+import { assert } from 'playwright-core/lib/utils/debug';
+import type * as crxchannels from '../protocol/channels';
+import { CrxRecorderApp } from './recorder/crxRecorderApp';
+import { CrxTransport } from './transport/crxTransport';
+import { BrowserContext } from 'playwright-core/lib/server/browserContext';
+import { IRecorder } from 'playwright-core/lib/server/recorder/recorderFrontend';
+import { Mode } from '@recorder/recorderTypes';
+const kTabIdSymbol = Symbol('kTabIdSymbol');
+export function tabIdFromPage(page: Page): number | undefined {
+  return (page as any)[kTabIdSymbol] as number;
+}
+export class Crx extends SdkObject {
+  constructor(playwright: Playwright) {
+    super(playwright, 'crx');
+  }
+  async start(options?: crxchannels.CrxStartOptions): Promise<CrxApplication> {
+    const transport = new CrxTransport();
+    const browserLogsCollector = new RecentLogsCollector();
+    const browserProcess: BrowserProcess = {
+      onclose: undefined,
+      process: undefined,
+      close: () => Promise.resolve(),
+      kill: () => Promise.resolve(),
+    };
+    const contextOptions: channels.BrowserNewContextParams = {
+      noDefaultViewport: true,
+      viewport: undefined,
+    };
+    const browserOptions: BrowserOptions = {
+      name: 'chromium',
+      isChromium: true,
+      headful: true,
+      persistent: contextOptions,
+      browserProcess,
+      protocolLogger: helper.debugProtocolLogger(),
+      browserLogsCollector,
+      originalLaunchOptions: {},
+      artifactsDir: '/crx/artifacts',
+      downloadsPath: '/crx/downloads',
+      tracesDir: '/crx/traces',
+      ...options
+    };
+    const browser = await CRBrowser.connect(this.attribution.playwright, transport, browserOptions);
+    return new CrxApplication(browser, transport);
+  }
+}
+export class CrxApplication extends SdkObject {
+  static Events = {
+    RecorderHide: 'hide',
+    RecorderShow: 'show',
+    Attached: 'attached',
+    Detached: 'detached',
+    ModeChanged: 'modeChanged',
+  };
+  private _browser: CRBrowser;
+  private _transport: CrxTransport;
+  private _recorderApp?: CrxRecorderApp;
+  constructor(browser: CRBrowser, transport: CrxTransport) {
+    super(browser, 'crxApplication');
+    this.instrumentation.addListener({
+      onPageClose: page => {
+        page.hideHighlight();
+      },
+    }, null);
+    this._browser = browser;
+    this._transport = transport;
+    this._context().on(BrowserContext.Events.Page, (page: Page) => {
+      const tabId = this.tabIdForPage(page);
+      if (!tabId) return;
+      (page as any)[kTabIdSymbol] = tabId;
+      page.on(Page.Events.Close, () => {
+        this.emit(CrxApplication.Events.Detached, { tabId });
+      });
+      this.emit(CrxApplication.Events.Attached, { page, tabId });
+    });
+  }
+  _context() {
+    return this._browser._defaultContext!;
+  }
+  _crPages() {
+    return [...this._browser._crPages.values()];
+  }
+  _crPageByTargetId(targetId: string) {
+    return this._browser._crPages.get(targetId);
+  }
+  tabIdForPage(page: Page) {
+    const targetId = this._crPages().find(crPage => crPage._initializedPage === page)?._targetId;
+    if (!targetId) return;
+    return this._transport.getTabId(targetId);
+  }
+  async showRecorder(options?: crxchannels.CrxApplicationShowRecorderParams) {
+    if (!this._recorderApp) {
+      const { mode, window, ...otherOptions } = options ?? {};
+      const recorderParams = {
+        language: options?.language ?? 'javascript',
+        mode: mode === 'none' ? undefined : mode,
+        ...otherOptions
+      };
+      Recorder.show('actions', this._context(), this._createRecorderApp.bind(this), recorderParams);
+    }
+    await this._recorderApp!.open(options);
+  }
+  async hideRecorder() {
+    await this._recorderApp?.close();
+  }
+  setMode(mode: Mode) {
+    this._recorderApp?._recorder.setMode(mode);
+  }
+  async attach(tabId: number): Promise<Page> {
+    const targetId = await this._transport.attach(tabId);
+    const crPage = this._crPageByTargetId(targetId);
+    assert(crPage);
+    const pageOrError = await crPage.pageOrError();
+    if (pageOrError instanceof Error) throw pageOrError;
+    return pageOrError;
+  }
+  async attachAll(params: crxchannels.CrxApplicationAttachAllParams) {
+    const tabs = await chrome.tabs.query(params);
+    const pages = await Promise.all(tabs.map(async tab => {
+      const baseUrl = chrome.runtime.getURL('');
+      if (tab.id && !tab.url?.startsWith(baseUrl))
+        return await this.attach(tab.id).catch(() => {});
+    }));
+    return pages.filter(Boolean) as Page[];
+  }
+  async detach(tabIdOrPage: number | Page) {
+    const targetId = tabIdOrPage instanceof Page ?
+      (tabIdOrPage._delegate as CRPage)._targetId :
+      this._transport.getTargetId(tabIdOrPage);
+    await this._doDetach(targetId);
+  }
+  async detachAll() {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(tabs.map(async tab => {
+      if (tab.id)
+        await this.detach(tab.id).catch(() => {});
+    }));
+  }
+  async newPage(params: crxchannels.CrxApplicationNewPageParams) {
+    const tab = await chrome.tabs.create({ url: 'about:blank', ...params });
+    if (!tab.id) throw new Error(`No ID found for tab`);
+    return await this.attach(tab.id);
+  }
+  async close() {
+    await Promise.all(this._crPages().map(crPage => this._doDetach(crPage._targetId)));
+    await this._transport.closeAndWait();
+    await this._browser.close({});
+  }
+  private async _createRecorderApp(recorder: IRecorder) {
+    if (!this._recorderApp) {
+      this._recorderApp = new CrxRecorderApp(recorder as Recorder, this._context());
+      this._recorderApp.on('show', () => this.emit(CrxApplication.Events.RecorderShow));
+      this._recorderApp.on('hide', () => this.emit(CrxApplication.Events.RecorderHide));
+      this._recorderApp.on('modeChanged', (event) => {
+        this.emit(CrxApplication.Events.ModeChanged, event);
+      });
+    }
+    return this._recorderApp;
+  }
+  private async _doDetach(targetId?: string) {
+    if (!targetId) return;
+    const crPage = this._crPageByTargetId(targetId);
+    if (!crPage) return;
+    const pageOrError = await crPage.pageOrError();
+    if (pageOrError instanceof Error) throw pageOrError;
+    await Promise.all([
+      this._recorderApp?.uninstall(pageOrError),
+      pageOrError.hideHighlight(),
+    ]);
+    const closed = new Promise(x => pageOrError.once(Page.Events.Close, x));
+    await this._transport.detach(targetId);
+    await closed;
+  }
+}
+            ```
+
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x9f in position 605: invalid start byte
+
+            crxPlaywright.ts
+            Content:
+            ```
+File: src/server/crxPlaywright.ts
+
+import { Playwright } from 'playwright-core/lib/server/playwright';
+import { Crx } from './crx';
+export class CrxPlaywright extends Playwright {
+  readonly _crx: Crx;
+  constructor() {
+    super({ sdkLanguage: 'javascript' });
+    this._crx = new Crx(this);
+  }
+}
+            ```
+
+            transport/
+                crxTransport.ts
+                Content:
+                ```
+File: src/server/transport/crxTransport.ts
+
+import { LogName, debugLogger } from 'playwright-core/lib/utils/debugLogger';
+import type { Protocol } from 'playwright-core/lib/server/chromium/protocol';
+import type { Progress } from 'playwright-core/lib/server/progress';
+import type { ConnectionTransport, ProtocolRequest, ProtocolResponse } from 'playwright-core/lib/server/transport';
+type Tab = chrome.tabs.Tab;
+type DebuggerSession = chrome.debugger.Debuggee & { sessionId?: string };
+export class CrxTransport implements ConnectionTransport {
+  private _progress?: Progress;
+  private _detachedPromise?: Promise<void>;
+  private _targetToTab: Map<string, number>;
+  private _tabToTarget: Map<number, string>;
+  private _sessions: Map<string, number>;
+  onmessage?: (message: ProtocolResponse) => void;
+  onclose?: () => void;
+  constructor(progress?: Progress) {
+    this._progress = progress;
+    this._tabToTarget = new Map();
+    this._targetToTab = new Map();
+    this._sessions = new Map();
+    chrome.debugger.onEvent.addListener(this._onDebuggerEvent);
+    chrome.debugger.onDetach.addListener(this._onRemoved);
+    chrome.tabs.onRemoved.addListener(this._onRemoved);
+    chrome.tabs.onCreated.addListener(this._onPopupCreated);
+  }
+  getTargetId(tabId: number) {
+    return this._tabToTarget.get(tabId);
+  }
+  getTabId(targetId: string) {
+    return this._targetToTab.get(targetId);
+  }
+  async send(message: ProtocolRequest) {
+    try {
+      const [, tabIdStr] = /crx-tab-(\d+)/.exec(message.sessionId ?? '') ?? [];
+      let debuggee: DebuggerSession;
+      if (tabIdStr) {
+        const tabId = parseInt(tabIdStr, 10);
+        debuggee = { tabId };
+      } else {
+        const sessionId = message.sessionId!;
+        const tabId = this._sessions.get(sessionId)!;
+        debuggee = { tabId, sessionId };
+      }
+      let result;
+      if (message.method === 'Target.setAutoAttach' && !debuggee.tabId) {
+        result = await Promise.resolve().then();
+      } else if (message.method === 'Target.setAutoAttach') {
+        const [, versionStr] = navigator.userAgent.match(/Chrome\/([0-9]+)./) ?? [];
+       result = await this._send(debuggee, message.method, { ...message.params, filter: [
+          { exclude: true, type: 'service_worker' },
+          { exclude: true, type: 'browser' },
+          { exclude: true, type: 'tab' },
+           ...(versionStr && parseInt(versionStr) >= 126 ? [{}] : []),
+        ]});
+      } else if (message.method === 'Target.getTargetInfo' && !debuggee.tabId) {
+        result = await Promise.resolve().then();
+      } else if (message.method === 'Target.createTarget') {
+        const { id: tabId } = await chrome.tabs.create({ url: 'about:blank' });
+        if (!tabId) throw new Error(`New tab has no id`);
+        const targetId = await this.attach(tabId);
+        result = { targetId };
+      } else if (message.method === 'Target.closeTarget') {
+        const { targetId } = message.params;
+        await this.detach(targetId);
+        result = true;
+      } else if (message.method === 'Target.disposeBrowserContext') {
+        result = await Promise.resolve().then();
+      } else if (message.method === 'Browser.getVersion') {
+        const userAgent = navigator.userAgent;
+        const [, product] = userAgent.match(/(Chrome\/[0-9\.]+)\b/) ?? [];
+        result = await Promise.resolve({ product, userAgent }).then();
+      } else if (message.method === 'Browser.getWindowForTarget') {
+        result = await Promise.resolve({}).then();
+      } else if (message.method === 'Browser.setDownloadBehavior') {
+        result = await Promise.resolve().then();
+      } else if (message.method === 'Emulation.setEmulatedMedia') {
+        result = await Promise.resolve().then();
+      } else {
+        result = await this._send(debuggee, message.method as keyof Protocol.CommandParameters, { ...message.params });
+      }
+      this._emitMessage({
+        ...message,
+        result,
+      });
+    } catch (error) {
+      this._emitMessage({
+        ...message,
+        error,
+      });
+    }
+  }
+  async attach(tabId: number) {
+    let targetId = this._tabToTarget.get(tabId);
+    if (!targetId) {
+      const debuggee = { tabId };
+      await chrome.debugger.attach(debuggee, '1.3');
+      this._progress?.log(`<chrome debugger attached to tab ${tabId}>`);
+      const { targetInfo } = await this._send(debuggee, 'Target.getTargetInfo');
+      targetId = targetInfo.targetId;
+      this._emitAttachedToTarget(tabId, targetInfo);
+      this._tabToTarget.set(tabId, targetId);
+      this._targetToTab.set(targetId, tabId);
+    }
+    return targetId;
+  }
+  async detach(tabOrTarget: number | string) {
+    const tabId = typeof tabOrTarget === 'number' ? tabOrTarget : this._targetToTab.get(tabOrTarget);
+    if (!tabId) return;
+    const targetId = this._tabToTarget.get(tabId);
+    this._tabToTarget.delete(tabId);
+    if (targetId) {
+      this._targetToTab.delete(targetId);
+      this._emitDetachedToTarget(tabId, targetId);
+    }
+    await chrome.debugger.detach({ tabId }).catch(() => {});
+    this._progress?.log(`<chrome debugger detached from tab ${tabId}>`);
+  }
+  close() {
+    if (this._detachedPromise) return;
+    this._detachedPromise = Promise.all([...this._tabToTarget.keys()]
+        .map(this.detach))
+        .then(() => this.onclose?.());
+  }
+  async closeAndWait() {
+    this._progress?.log(`<chrome debugger disconnecting>`);
+    chrome.debugger.onEvent.removeListener(this._onDebuggerEvent);
+    chrome.tabs.onCreated.removeListener(this._onPopupCreated);
+    this.close();
+    await this._detachedPromise; 
+    chrome.tabs.onRemoved.removeListener(this._onRemoved);
+    chrome.tabs.onDetached.removeListener(this._onRemoved);
+    this._progress?.log(`<chrome debugger disconnected>`);
+  }
+  private async _send<T extends keyof Protocol.CommandParameters>(
+    debuggee: DebuggerSession,
+    method: T,
+    commandParams?: Protocol.CommandParameters[T]
+  ) {
+    if (!debuggee.tabId) console.trace(`No tabId provided for ${method}`);
+    if (debugLogger.isEnabled('chromedebugger' as LogName)) {
+      debugLogger.log('chromedebugger' as LogName, `SEND> ${method} #${debuggee.tabId}`);
+    }
+    return await chrome.debugger.sendCommand(debuggee, method, commandParams) as
+      Protocol.CommandReturnValues[T];
+  }
+  private _onPopupCreated = async ({ openerTabId, id }: Tab) => {
+    if (!openerTabId || !id) return;
+    if (this._tabToTarget.has(openerTabId))
+      await this.attach(id).catch(() => {});
+  };
+  private _onRemoved = (tabIdOrDebuggee: number | { tabId?: number }) => {
+    const tabId = typeof tabIdOrDebuggee === 'number' ? tabIdOrDebuggee : tabIdOrDebuggee.tabId;
+    if (!tabId) return;
+    const targetId = this._tabToTarget.get(tabId);
+    this._tabToTarget.delete(tabId);
+    if (targetId) {
+      this._targetToTab.delete(targetId);
+      this._emitDetachedToTarget(tabId, targetId);
+    }
+  };
+  private _onDebuggerEvent = ({ tabId, sessionId }: DebuggerSession, message?: string, params?: any) => {
+    if (!tabId) return;
+    if (!sessionId) sessionId = this._sessionIdFor(tabId);
+    if (message === 'Target.attachedToTarget') {
+      this._sessions.set((params as Protocol.Target.attachToTargetReturnValue).sessionId, tabId);
+    } else if (message === 'Target.detachedFromTarget') {
+      this._sessions.delete((params as Protocol.Target.attachToTargetReturnValue).sessionId);
+    }
+    if (debugLogger.isEnabled(`chromedebugger` as LogName)) {
+      debugLogger.log('chromedebugger' as LogName, `<RECV ${message} #${tabId}`);
+    }
+    this._emitMessage({
+      method: message,
+      sessionId,
+      params,
+    });
+  };
+  private _emitMessage(message: ProtocolResponse) {
+    if (this.onmessage)
+      this.onmessage(message);
+  }
+  private _sessionIdFor(tabId: number): string {
+    return `crx-tab-${tabId}`;
+  }
+  private _emitAttachedToTarget(tabId: number, targetInfo: Protocol.Target.TargetInfo) {
+    const sessionId = this._sessionIdFor(tabId);
+    this._emitMessage({
+      method: 'Target.attachedToTarget',
+      sessionId: '',
+      params: {
+        sessionId,
+        targetInfo,
+      }
+    });
+  }
+  private _emitDetachedToTarget(tabId: number, targetId: string) {
+    const sessionId = this._sessionIdFor(tabId);
+    this._emitMessage({
+      method: 'Target.detachedFromTarget',
+      sessionId: '',
+      params: {
+        sessionId,
+        targetId,
+      }
+    });
+  }
+}
+                ```
+
+            dispatchers/
+                crxDispatcher.ts
+                Content:
+                ```
+File: src/server/dispatchers/crxDispatcher.ts
+
+import type * as channels from '../../protocol/channels';
+import { PageDispatcher } from 'playwright-core/lib/server/dispatchers/pageDispatcher';
+import type { Crx } from '../crx';
+import { CrxApplication } from '../crx';
+import type { RootDispatcher } from 'playwright-core/lib/server/dispatchers/dispatcher';
+import { Dispatcher } from 'playwright-core/lib/server/dispatchers/dispatcher';
+import { BrowserContextDispatcher } from 'playwright-core/lib/server/dispatchers/browserContextDispatcher';
+import { CallMetadata } from '@protocol/callMetadata';
+export class CrxDispatcher extends Dispatcher<Crx, channels.CrxChannel, RootDispatcher> implements channels.CrxChannel {
+  _type_Crx = true;
+  constructor(scope: RootDispatcher, crx: Crx) {
+    super(scope, crx, 'Crx', { });
+  }
+  async start(params: channels.CrxStartParams): Promise<channels.CrxStartResult> {
+    return { crxApplication: new CrxApplicationDispatcher(this, await this._object.start(params)) };
+  }
+}
+export class CrxApplicationDispatcher extends Dispatcher<CrxApplication, channels.CrxApplicationChannel, CrxDispatcher> implements channels.CrxApplicationChannel {
+  _type_CrxApplication = true;
+  private _context: BrowserContextDispatcher;
+  constructor(scope: CrxDispatcher, crxApplication: CrxApplication) {
+    const context = new BrowserContextDispatcher(scope, crxApplication._context());
+    super(scope, crxApplication, 'CrxApplication', { context });
+    this._context = context;
+    this.addObjectListener(CrxApplication.Events.RecorderHide, () => {
+      (this._dispatchEvent as any)('hide');
+    });
+    this.addObjectListener(CrxApplication.Events.RecorderShow, () => {
+      (this._dispatchEvent as any)('show');
+    });
+    this.addObjectListener(CrxApplication.Events.Attached, ({ tabId, page }) => {
+      this._dispatchEvent('attached', { tabId, page: PageDispatcher.from(this._context, page) });
+    });
+    this.addObjectListener(CrxApplication.Events.Detached, ({ tabId }) => {
+      this._dispatchEvent('detached', { tabId });
+    });
+    this.addObjectListener(CrxApplication.Events.ModeChanged, event => {
+      (this._dispatchEvent as any)('modeChanged', event);
+    });
+  }
+  async attach(params: channels.CrxApplicationAttachParams): Promise<channels.CrxApplicationAttachResult> {
+    return { page: PageDispatcher.from(this._context, await this._object.attach(params.tabId)) };
+  }
+  async attachAll(params: channels.CrxApplicationAttachAllParams): Promise<channels.CrxApplicationAttachAllResult> {
+    return { pages: (await this._object.attachAll(params)).map(page => PageDispatcher.from(this._context, page)) };
+  }
+  async detach(params: channels.CrxApplicationDetachParams): Promise<void> {
+    if ((params.tabId && params.page))
+      throw new Error(`Only either tabId or page must be specified, not both`);
+    if ((!params.tabId && !params.page))
+      throw new Error(`Either tabId or page must be specified, not none`);
+    await this._object.detach(params.tabId ?? (params.page as PageDispatcher)._object);
+  }
+  async detachAll(): Promise<void> {
+    await this._object.detachAll();
+  }
+  async newPage(params: channels.CrxApplicationNewPageParams): Promise<channels.CrxApplicationNewPageResult> {
+    return { page: PageDispatcher.from(this._context, await this._object.newPage(params)) };
+  }
+  async showRecorder(params: channels.CrxApplicationShowRecorderParams): Promise<void> {
+    await this._object.showRecorder(params);
+  }
+  async hideRecorder(): Promise<void> {
+    await this._object.hideRecorder();
+  }
+  async setMode(params: channels.CrxApplicationSetModeParams, metadata?: CallMetadata): Promise<channels.CrxApplicationSetModeResult> {
+    this._object.setMode(params.mode);
+  }
+  async close(): Promise<void> {
+    await this._object.close();
+    this._dispose();
+  }
+}
+                ```
+
+                crxPlaywrightDispatcher.ts
+                Content:
+                ```
+File: src/server/dispatchers/crxPlaywrightDispatcher.ts
+
+import type * as channels from '@protocol/channels';
+import { deviceDescriptors as descriptors } from 'playwright-core/lib/server/deviceDescriptors';
+import { AndroidDispatcher } from 'playwright-core/lib/server/dispatchers/androidDispatcher';
+import { BrowserTypeDispatcher } from 'playwright-core/lib/server/dispatchers/browserTypeDispatcher';
+import type { RootDispatcher } from 'playwright-core/lib/server/dispatchers/dispatcher';
+import { Dispatcher } from 'playwright-core/lib/server/dispatchers/dispatcher';
+import { ElectronDispatcher } from 'playwright-core/lib/server/dispatchers/electronDispatcher';
+import { LocalUtilsDispatcher } from 'playwright-core/lib/server/dispatchers/localUtilsDispatcher';
+import { APIRequestContextDispatcher } from 'playwright-core/lib/server/dispatchers/networkDispatchers';
+import { SelectorsDispatcher } from 'playwright-core/lib/server/dispatchers/selectorsDispatcher';
+import { GlobalAPIRequestContext } from 'playwright-core/lib/server/fetch';
+import type { Playwright } from 'playwright-core/lib/server/playwright';
+import { CrxDispatcher } from './crxDispatcher';
+import type { CrxPlaywright } from '../crxPlaywright';
+export class CrxPlaywrightDispatcher extends Dispatcher<Playwright, channels.PlaywrightChannel, RootDispatcher> implements channels.PlaywrightChannel {
+  _type_Playwright;
+  constructor(scope: RootDispatcher, playwright: CrxPlaywright) {
+    super(scope, playwright, 'Playwright', {
+      chromium: new BrowserTypeDispatcher(scope, playwright.chromium),
+      firefox: new BrowserTypeDispatcher(scope, playwright.firefox),
+      webkit: new BrowserTypeDispatcher(scope, playwright.webkit),
+      bidiChromium: new BrowserTypeDispatcher(scope, playwright.bidiChromium),
+      bidiFirefox: new BrowserTypeDispatcher(scope, playwright.bidiFirefox),
+      android: new AndroidDispatcher(scope, playwright.android),
+      electron: new ElectronDispatcher(scope, playwright.electron),
+      utils: new LocalUtilsDispatcher(scope, playwright),
+      deviceDescriptors: Object.entries(descriptors).map(([name, descriptor]) => ({ name, descriptor })),
+      selectors: new SelectorsDispatcher(scope, playwright.selectors),
+      _crx: new CrxDispatcher(scope, playwright._crx),
+    });
+    this._type_Playwright = true;
+  }
+  async newRequest(params: channels.PlaywrightNewRequestParams): Promise<channels.PlaywrightNewRequestResult> {
+    const request = new GlobalAPIRequestContext(this._object, params);
+    return { request: APIRequestContextDispatcher.from(this.parentScope(), request) };
+  }
+  async cleanup() {
+  }
+}
+                ```
+
+            recorder/
+                sidepanelRecorderWindow.ts
+                Content:
+                ```
+File: src/server/recorder/sidepanelRecorderWindow.ts
+
+import { RecorderEventData, RecorderMessage, RecorderWindow } from "./crxRecorderApp";
+export class SidepanelRecorderWindow implements RecorderWindow {
+    private _recorderUrl: string;
+    private _portPromise: Promise<chrome.runtime.Port>;
+    private _closed = true;
+    onMessage?: (({ type, event, params }: RecorderEventData) => void) | undefined;
+    hideApp?: (() => any) | undefined;
+    constructor(recorderUrl?: string) {
+      this._recorderUrl = recorderUrl ?? 'index.html';
+      this._portPromise = this._waitConnect();
+    }
+    isClosed(): boolean {
+      return this._closed;
+    }
+    postMessage(msg: RecorderMessage) {
+      this._portPromise.then(port => port.postMessage({ ...msg })).catch(() => {});
+    }
+    async open() {
+      await chrome.sidePanel.setOptions({ path: this._recorderUrl });
+      await this._portPromise;
+      this._closed = false;
+    }
+    async focus() {
+    }
+    async close() {
+      if (this._closed)
+        return;
+      this._closed = true;
+      this._portPromise.then(port => port.disconnect());
+      this._portPromise = this._waitConnect();
+      this.hideApp?.();
+    }
+    private _waitConnect(): Promise<chrome.runtime.Port> {
+      return new Promise(resolve => {
+        const onConnect = (port: chrome.runtime.Port) => {
+          chrome.runtime.onConnect.removeListener(onConnect);
+          port.onDisconnect.addListener(this.close.bind(this));
+          if (this.onMessage)
+            port.onMessage.addListener(this.onMessage.bind(this));
+          resolve(port);
+        };
+        chrome.runtime.onConnect.addListener(onConnect);
+      });
+    }
+  }
+                ```
+
+                script.ts
+                Content:
+                ```
+File: src/server/recorder/script.ts
+
+import { CallMetadata } from "@protocol/callMetadata";
+import { ActionInContext } from "@recorder/actions";
+import { Source } from "@recorder/recorderTypes";
+import { CSharpLanguageGenerator } from "playwright-core/lib/server/codegen/csharp";
+import { JavaLanguageGenerator } from "playwright-core/lib/server/codegen/java";
+import { JavaScriptLanguageGenerator } from "playwright-core/lib/server/codegen/javascript";
+import { PythonLanguageGenerator } from "playwright-core/lib/server/codegen/python";
+import { Language, LanguageGeneratorOptions } from "playwright-core/lib/server/codegen/types";
+import { monotonicTime } from "playwright-core/lib/utils";
+export type Location = CallMetadata['location'];
+export type ActionInContextWithLocation = ActionInContext & { location?: Location };
+export type Script = {
+  filename: string;
+  language?: Language;
+  header: LanguageGeneratorOptions;
+  actions: ActionInContextWithLocation[];
+}
+const languages = new Map([
+  new JavaLanguageGenerator('junit'),
+  new JavaLanguageGenerator('library'),
+  new JavaScriptLanguageGenerator(false),
+  new JavaScriptLanguageGenerator(true),
+  new PythonLanguageGenerator(false, true),
+  new PythonLanguageGenerator(false, false),
+  new PythonLanguageGenerator(true,  false),
+  new CSharpLanguageGenerator('mstest'),
+  new CSharpLanguageGenerator('nunit'),
+  new CSharpLanguageGenerator('library'),
+].map(gen => [gen.id, gen]));
+export function toSource(script: Script): Source {
+  const langGenerator = languages.get(script.language ?? script.filename) ?? languages.get('javascript')!;
+  const header = langGenerator.generateHeader(script.header);
+  const footer = langGenerator.generateFooter(undefined);
+  const actions = script.actions.map(({ frame, action }) => {
+    const actionInContext: ActionInContext = {
+      action,
+      frame,
+      startTime: monotonicTime()
+    }
+    return langGenerator.generateAction(actionInContext);
+  });
+  const text = [header, ...actions, footer].filter(Boolean).join('\n');
+  return {
+    isRecorded: false,
+    id: script.filename,
+    label: script.filename,
+    text,
+    language: langGenerator.highlighter,
+    highlight: [],
+    group: 'Scripts',
+    header,
+    footer,
+    actions,
+  };
+}
+                ```
+
+                crxPlayer.ts
+                Content:
+                ```
+File: src/server/recorder/crxPlayer.ts
+
+import EventEmitter from 'events';
+import { BrowserContext } from 'playwright-core/lib/server/browserContext';
+import type { Page } from 'playwright-core/lib/server/page';
+import { createGuid, isUnderTest, ManualPromise, monotonicTime, serializeExpectedTextValues } from 'playwright-core/lib/utils';
+import { Frame } from 'playwright-core/lib/server/frames';
+import { CallMetadata } from '@protocol/callMetadata';
+import { serializeError } from 'playwright-core/lib/server/errors';
+import { buildFullSelector } from 'playwright-core/lib/utils/isomorphic/recorderUtils';
+import { toKeyboardModifiers } from 'playwright-core/lib/server/codegen/language';
+import { ActionInContextWithLocation, Location } from './script';
+import { FrameDescription } from '@recorder/actions';
+import { toClickOptions } from 'playwright-core/lib/server/recorder/recorderRunner';
+class Stopped extends Error {}
+export type PerformAction = ActionInContextWithLocation | {
+  action: {
+    name: 'pause';
+  };
+  frame: FrameDescription;
+  location?: Location;
+};
+export default class Player extends EventEmitter {
+  private _currAction?: PerformAction;
+  private _stopping?: ManualPromise;
+  private _pageAliases = new Map<Page, string>();
+  private _pause?: Promise<void>;
+  private _context: BrowserContext;
+  constructor(context: BrowserContext) {
+    super();
+    this._context = context;
+  }
+  async pause() {
+    if (!this._pause) {
+      const pauseAction = {
+        action: { name: 'pause' },
+        frame: { pageAlias: 'page', framePath: [] },
+      } satisfies PerformAction;
+      this._pause = this
+          ._performAction(pauseAction)
+          .finally(() => this._pause = undefined)
+          .catch(() => {});
+    }
+    await this._pause;
+  }
+  async play(actions: PerformAction[]) {
+    if (this.isPlaying()) return;
+    this._pageAliases.clear();
+    const [page] = this._context.pages();
+    if (!page) return;
+    this._pageAliases.set(page, 'page');
+    this.emit('start');
+    try {
+      for (const action of actions) {
+        if (action.action.name === 'openPage' && action.frame.pageAlias === 'page') continue;
+        this._currAction = action;
+        await this._performAction(action);
+      }
+    } catch (e) {
+      if (e instanceof Stopped) return;
+      throw e;
+    } finally {
+      this._currAction = undefined;
+      this.pause().catch(() => {});
+    }
+  }
+  isPlaying() {
+    return !!this._currAction;
+  }
+  async stop() {
+    if (this._currAction || this._pause) {
+      this._currAction = undefined;
+      this._stopping = new ManualPromise();
+      await Promise.all([
+        this._stopping,
+        this._pause,
+      ]);
+      this._stopping = undefined;
+      this._pause = undefined;
+      this.emit('stop');
+    }
+  }
+  private async _performAction(actionInContext: PerformAction) {
+    this._checkStopped();
+    const innerPerformAction = async (mainFrame: Frame | null, action: string, params: any, cb: (callMetadata: CallMetadata) => Promise<any>): Promise<void> => {
+      const context = mainFrame ?? this._context;
+      const callMetadata: CallMetadata = {
+        id: `call@${createGuid()}`,
+        apiName: 'frame.' + action,
+        internal: action === 'pause',
+        objectId: context.guid,
+        pageId: mainFrame?._page.guid,
+        frameId: mainFrame?.guid,
+        startTime: monotonicTime(),
+        endTime: 0,
+        type: 'Frame',
+        method: action,
+        params,
+        log: [],
+        location: actionInContext.location,
+        playing: true,
+      };
+      try {
+        this._checkStopped();
+        await context.instrumentation.onBeforeCall(context, callMetadata);
+        this._checkStopped();
+        await cb(callMetadata);
+      } catch (e) {
+        callMetadata.error = serializeError(e);
+      } finally {
+        callMetadata.endTime = monotonicTime();
+        await context.instrumentation.onAfterCall(context, callMetadata);
+        if (callMetadata.error)
+          throw callMetadata.error.error;
+      }
+    }
+    const { action } = actionInContext;  
+    const { _pageAliases: pageAliases, _context: context } = this;
+    if (action.name === 'pause')
+      return await innerPerformAction(null, 'pause', {}, () => Promise.resolve());
+    if (action.name === 'openPage')
+      return await innerPerformAction(null, 'openPage', { url: action.url }, async callMetadata => {
+        const pageAlias = actionInContext.frame.pageAlias;
+        if ([...pageAliases.values()].includes(pageAlias)) throw new Error(`Page with alias ${pageAlias} already exists`);
+        const newPage = await context.newPage(callMetadata);
+        pageAliases.set(newPage, pageAlias);
+      });
+    const pageAlias = actionInContext.frame.pageAlias;
+    const page = [...pageAliases.entries()].find(([, alias]) => pageAlias === alias)?.[0];
+    if (!page)
+      throw new Error('Internal error: page not found');
+    const mainFrame = page.mainFrame();
+    const kActionTimeout = isUnderTest() ? 2000 : 5000;
+    if (action.name === 'navigate')
+      return await innerPerformAction(mainFrame, 'navigate', { url: action.url }, callMetadata => mainFrame.goto(callMetadata, action.url, { timeout: kActionTimeout }));
+    if (action.name === 'closePage')
+      return await innerPerformAction(mainFrame, action.name, {}, async callMetadata => {
+        pageAliases.delete(page);
+        await page.close(callMetadata, { runBeforeUnload: true });
+      });
+    const selector = buildFullSelector(actionInContext.frame.framePath, action.selector);
+    if (action.name === 'click') {
+      const options = toClickOptions(action);
+      return await innerPerformAction(mainFrame, 'click', { selector }, callMetadata => mainFrame.click(callMetadata, selector, { ...options, timeout: kActionTimeout, strict: true }));
+    }
+    if (action.name === 'press') {
+      const modifiers = toKeyboardModifiers(action.modifiers);
+      const shortcut = [...modifiers, action.key].join('+');
+      return await innerPerformAction(mainFrame, 'press', { selector, key: shortcut }, callMetadata => mainFrame.press(callMetadata, selector, shortcut, { timeout: kActionTimeout, strict: true }));
+    }
+    if (action.name === 'fill')
+      return await innerPerformAction(mainFrame, 'fill', { selector, text: action.text }, callMetadata => mainFrame.fill(callMetadata, selector, action.text, { timeout: kActionTimeout, strict: true }));
+    if (action.name === 'setInputFiles')
+      return await innerPerformAction(mainFrame, 'setInputFiles', { selector: action.selector, files: action.files }, () => Promise.reject(new Error(`player does not support setInputFiles yet`)));
+    if (action.name === 'check')
+      return await innerPerformAction(mainFrame, 'check', { selector }, callMetadata => mainFrame.check(callMetadata, selector, { timeout: kActionTimeout, strict: true }));
+    if (action.name === 'uncheck')
+      return await innerPerformAction(mainFrame, 'uncheck', { selector }, callMetadata => mainFrame.uncheck(callMetadata, selector, { timeout: kActionTimeout, strict: true }));
+    if (action.name === 'select') {
+      const values = action.options.map(value => ({ value }));
+      return await innerPerformAction(mainFrame, 'selectOption', { selector, values }, callMetadata => mainFrame.selectOption(callMetadata, selector, [], values, { timeout: kActionTimeout, strict: true }));
+    }
+    if (action.name === 'assertChecked') {
+      return await innerPerformAction(mainFrame, 'assertChecked', { selector }, callMetadata => mainFrame.expect(callMetadata, selector, {
+        selector,
+        expression: 'to.be.checked',
+        isNot: !action.checked,
+        timeout: kActionTimeout,
+      }));
+    }
+    if (action.name === 'assertText') {
+      return await innerPerformAction(mainFrame, 'assertText', { selector }, callMetadata => mainFrame.expect(callMetadata, selector, {
+        selector,
+        expression: 'to.have.text',
+        expectedText: serializeExpectedTextValues([action.text], { matchSubstring: true, normalizeWhiteSpace: true }),
+        isNot: false,
+        timeout: kActionTimeout,
+      }));
+    }
+    if (action.name === 'assertValue') {
+      return await innerPerformAction(mainFrame, 'assertValue', { selector }, callMetadata => mainFrame.expect(callMetadata, selector, {
+        selector,
+        expression: 'to.have.value',
+        expectedText: serializeExpectedTextValues([action.value], { matchSubstring: false, normalizeWhiteSpace: true }),
+        isNot: false,
+        timeout: kActionTimeout,
+      }));
+    }
+    if (action.name === 'assertVisible') {
+      return await innerPerformAction(mainFrame, 'assertVisible', { selector }, callMetadata => mainFrame.expect(callMetadata, selector, {
+        selector,
+        expression: 'to.be.visible',
+        isNot: false,
+        timeout: kActionTimeout,
+      }));
+    }
+    throw new Error('Internal error: unexpected action ' + (action as any).name);
+  }
+  private _checkStopped() {
+    if (this._stopping) {
+      this._stopping.resolve();
+      throw new Stopped();
+    }
+  }
+}
+                ```
+
+                crxRecorderApp.ts
+                Content:
+                ```
+File: src/server/recorder/crxRecorderApp.ts
+
+import type { CallLog, EventData, Mode, Source } from '@recorder/recorderTypes';
+import { EventEmitter } from 'events';
+import { BrowserContext } from 'playwright-core/lib/server/browserContext';
+import { Page } from 'playwright-core/lib/server/page';
+import type { Recorder } from 'playwright-core/lib/server/recorder';
+import type * as channels from '../../protocol/channels';
+import Player from './crxPlayer';
+import { Script, toSource } from './script';
+import { LanguageGeneratorOptions } from 'playwright-core/lib/server/codegen/types';
+import { PerformAction } from './crxPlayer';
+import { PopupRecorderWindow } from './popupRecorderWindow';
+import { SidepanelRecorderWindow } from './sidepanelRecorderWindow';
+import { IRecorderApp } from 'playwright-core/lib/server/recorder/recorderFrontend';
+import { ActionInContext } from '@recorder/actions';
+export type RecorderMessage = { type: 'recorder' } & (
+  | { method: 'updateCallLogs', callLogs: CallLog[] }
+  | { method: 'setPaused', paused: boolean }
+  | { method: 'setMode', mode: Mode }
+  | { method: 'setSources', sources: Source[] }
+  | { method: 'setActions', actions: ActionInContext[], sources: Source[] }
+  | { method: 'setFile', file: string }
+  | { method: 'setSelector', selector: string, userGesture?: boolean }
+);
+export type RecorderEventData =  EventData & { type: string };
+export interface RecorderWindow {
+  isClosed(): boolean;
+  postMessage: (msg: RecorderMessage) => void;
+  open: () => Promise<void>;
+  focus: () => Promise<void>;
+  close: () => Promise<void>;
+  onMessage?: ({ type, event, params }: RecorderEventData) => void; 
+  hideApp?: () => any;
+}
+export class CrxRecorderApp extends EventEmitter implements IRecorderApp {
+  readonly wsEndpointForTest: string | undefined;
+  readonly _recorder: Recorder;
+  private _context: BrowserContext;
+  private _player: Player;
+  private _filename?: string;
+  private _jsonlSource?: Source;
+  private _mode: Mode = 'none';
+  private _window?: RecorderWindow;
+  constructor(recorder: Recorder, context: BrowserContext) {
+    super();
+    this._recorder = recorder;
+    this._context = context;
+    this._player = new Player(this._context);
+    this._player.on('start', () => this._recorder.clearErrors());
+  }
+  async open(options?: channels.CrxApplicationShowRecorderParams) {
+    const mode = options?.mode ?? 'none';
+    const language = options?.language ?? 'javascript';
+    if (this._window)
+      await this._window.close();
+    this._window = options?.window?.type === 'sidepanel' ? new SidepanelRecorderWindow(options.window.url) : new PopupRecorderWindow(options?.window?.url);
+    this._window.onMessage = this._onMessage.bind(this);
+    this._window.hideApp  = this._hide.bind(this);
+    this._onMessage({ type: 'recorderEvent', event: 'clear', params: {} });
+    this._onMessage({ type: 'recorderEvent', event: 'fileChanged', params: { file: language } });
+    this._recorder.setOutput(language, undefined);
+    this._recorder.setMode(mode);
+    if (this._window.isClosed()) {
+      await this._window.open();
+      this.emit('show');
+    } else {
+      await this._window.focus();
+    }
+    this.setMode(mode);
+    this.setFile(language);
+  }
+  async close() {
+    if (!this._window || this._window.isClosed())
+      return;
+    this._hide();
+    this._window = undefined;
+  }
+  private _hide() {
+    this._recorder.setMode('none');
+    this.setMode('none');
+    this._window?.close();
+    this.emit('hide');
+  }
+  async setPaused(paused: boolean) {
+    this._sendMessage({ type: 'recorder', method: 'setPaused',  paused });
+  }
+  async setMode(mode: Mode) {
+    if (['none', 'standby'].includes(mode)) {
+      this._player.pause().catch(() => {});
+    } else {
+      this._player.stop().catch(() => {});
+    }
+    if (this._mode !== mode) {
+      this._mode = mode;
+      this.emit('modeChanged', { mode });
+    }
+    this._sendMessage({ type: 'recorder', method: 'setMode', mode });
+  }
+  async setFile(file: string) {
+    this._sendMessage({ type: 'recorder', method: 'setFile', file });
+  }
+  async setSelector(selector: string, userGesture?: boolean) {
+    if (userGesture) {
+      if (this._recorder.mode() === 'inspecting') {
+        this._recorder.setMode('standby');
+        this._window?.focus();
+      } else {
+        this._recorder.setMode('recording');
+      }
+    }
+    this._sendMessage({ type: 'recorder', method: 'setSelector', selector, userGesture });
+  }
+  async updateCallLogs(callLogs: CallLog[]) {
+    this._sendMessage({ type: 'recorder', method: 'updateCallLogs', callLogs });
+  }
+  async setSources(sources: Source[]) {
+    this._jsonlSource = sources.find(s => s.id === 'jsonl');
+    this._sendMessage({ type: 'recorder', method: 'setSources', sources });
+  }
+  async setActions(actions: ActionInContext[], sources: Source[]) {
+    this._sendMessage({ type: 'recorder', method: 'setActions', actions, sources });
+  }
+  private _onMessage({ type, event, params }: EventData & { type: string }) {
+    if (type === 'recorderEvent') {
+      switch (event) {
+        case 'fileChanged':
+          this._filename = params.file;
+          break;
+        case 'resume':
+        case 'step':
+          this._player.play(this._getPerformActions()).catch(() => {});
+          break;
+        case 'setMode':
+          const { mode } = params;
+          if (this._mode !== mode) {
+            this._mode = mode;
+            this.emit('modeChanged', { mode });
+          }
+          break;
+      }
+      this.emit('event', { event, params });
+    }
+  };
+  _sendMessage(msg: RecorderMessage) {
+    return this._window?.postMessage(msg);
+  }
+  async uninstall(page: Page) {
+    await this._recorder._uninstallInjectedRecorder(page);
+  }
+  private _getPerformActions(): PerformAction[] {
+    const { header: headerJson, actions: actionsJson } = this._jsonlSource ?? {};
+    const file = this._filename;
+    if (!headerJson || !actionsJson || !file) return [];
+    const header = JSON.parse(headerJson) as LanguageGeneratorOptions;
+    const actions = actionsJson.map(a => JSON.parse(a)).map(
+      ({ pageAlias, locator, framePath, ...action }) => ({ action, frame: { pageAlias, framePath } }
+    ) as ActionInContext);
+    const script: Script = { header, actions, filename: file };
+    const source = toSource(script);
+    return script.actions.map((action, index) => {
+      const location = { file, line: sourceLine(source!, index) };
+      return { ...action, location };
+    });
+  }
+}
+function sourceLine({ header, actions }: Source, index: number) {
+  const numLines = (str?: string) => str ? str.split(/\r?\n/).length : 0;
+  return numLines(header) + numLines(actions?.slice(0, index).filter(Boolean).join('\n')) + 1;
+}
+                ```
+
+                popupRecorderWindow.ts
+                Content:
+                ```
+File: src/server/recorder/popupRecorderWindow.ts
+
+import { RecorderEventData, RecorderMessage, RecorderWindow } from "./crxRecorderApp";
+export class PopupRecorderWindow implements RecorderWindow {
+  private _recorderUrl: string;
+  private _window?: chrome.windows.Window;
+  private id?: number;
+  private _portPromise?: Promise<chrome.runtime.Port>;
+  onMessage?: ({ type, event, params }: RecorderEventData) => void; 
+  hideApp?: () => any;
+  constructor(recorderUrl?: string) {
+    this._recorderUrl = recorderUrl ?? 'index.html';
+    chrome.windows.onRemoved.addListener(window => {
+      if (this._window?.id === window)
+        this.close().catch(() => {});
+    });
+  }
+  isClosed() {
+    return !this._window;
+  }
+  postMessage(msg: RecorderMessage) {
+    this._portPromise?.then(port => port.postMessage({ ...msg })).catch(() => {});
+  }
+  async open() {
+    if (this._window)
+      return;
+    this._portPromise = new Promise<chrome.runtime.Port>(resolve => {
+      const onConnect = (port: chrome.runtime.Port) => {
+        chrome.runtime.onConnect.removeListener(onConnect);
+        port.onDisconnect.addListener(this.close.bind(this));
+        if (this.onMessage)
+          port.onMessage.addListener(this.onMessage);
+        resolve(port);
+      };
+      chrome.runtime.onConnect.addListener(onConnect);
+    });
+    const [wnd] = await Promise.all([
+      chrome.windows.create({ type: 'popup', url: this._recorderUrl }),
+      this._portPromise,
+    ]);
+    this._window = wnd;
+  }
+  async focus() {
+    await chrome.windows.update(this.id!, { drawAttention: true, focused: true });
+  }
+  async close() {
+    if (!this._portPromise)
+      return;
+    this.hideApp?.();
+    if (this._window?.id) chrome.windows.remove(this._window.id).catch(() => {});
+    this._portPromise?.then(port => port.disconnect()).catch(() => {});
+    this._window = undefined;
+    this._portPromise = undefined;
+  };
+}
+                ```
+
+        protocol/
+            channels.ts
+            Content:
+            ```
+File: src/protocol/channels.ts
+
+import type { BrowserContextChannel, Channel, PageChannel, PlaywrightInitializer } from '@protocol/channels';
+import { Mode } from '@recorder/recorderTypes';
+import type { CallMetadata } from 'playwright-core/lib/server/instrumentation';
+export type CrxPlaywrightInitializer = PlaywrightInitializer & { _crx: CrxChannel };
+export type CrxInitializer = {};
+export interface CrxEventTarget {
+}
+export interface CrxChannel extends CrxEventTarget, Channel {
+  _type_Crx: boolean;
+  start(params: CrxStartParams, metadata?: CallMetadata): Promise<CrxStartResult>;
+}
+export type CrxStartParams = {
+  slowMo?: number,
+};
+export type CrxStartOptions = {
+  slowMo?: number,
+};
+export type CrxStartResult = {
+  crxApplication: CrxApplicationChannel,
+};
+export interface CrxEvents {
+}
+export type CrxApplicationInitializer = {
+  context: BrowserContextChannel,
+};
+export interface CrxApplicationEventTarget {
+  on(event: 'hide', callback: (params: CrxApplicationHideEvent) => void): this;
+  on(event: 'show', callback: (params: CrxApplicationShowEvent) => void): this;
+  on(event: 'attached', callback: (params: CrxApplicationAttachedEvent) => void): this;
+  on(event: 'detached', callback: (params: CrxApplicationDetachedEvent) => void): this;
+  on(event: 'modeChanged', callback: (params: CrxApplicationModeChangedEvent) => void): this;
+}
+export interface CrxApplicationChannel extends CrxApplicationEventTarget, Channel {
+  _type_CrxApplication: boolean;
+  attach(params: CrxApplicationAttachParams, metadata?: CallMetadata): Promise<CrxApplicationAttachResult>;
+  attachAll(params: CrxApplicationAttachAllParams, metadata?: CallMetadata): Promise<CrxApplicationAttachAllResult>;
+  detach(params: CrxApplicationDetachParams, metadata?: CallMetadata): Promise<CrxApplicationDetachResult>;
+  detachAll(params?: CrxApplicationDetachAllParams, metadata?: CallMetadata): Promise<CrxApplicationDetachAllResult>;
+  newPage(params: CrxApplicationNewPageParams, metadata?: CallMetadata): Promise<CrxApplicationNewPageResult>;
+  showRecorder(params: CrxApplicationShowRecorderParams, metadata?: CallMetadata): Promise<CrxApplicationShowRecorderResult>;
+  hideRecorder(params?: CrxApplicationHideRecorderParams, metadata?: CallMetadata): Promise<CrxApplicationHideRecorderResult>;
+  setMode(params: CrxApplicationSetModeParams, metadata?: CallMetadata): Promise<CrxApplicationSetModeResult>;
+  close(params?: CrxApplicationCloseParams, metadata?: CallMetadata): Promise<CrxApplicationCloseResult>;
+}
+export type CrxApplicationHideEvent = {};
+export type CrxApplicationShowEvent = {};
+export type CrxApplicationAttachedEvent = {
+  page: PageChannel,
+  tabId: number,
+};
+export type CrxApplicationDetachedEvent = {
+  tabId: number,
+};
+export type CrxApplicationModeChangedEvent = {
+  mode: 'none' | 'recording' | 'inspecting' | 'assertingText' | 'recording-inspecting' | 'standby' | 'assertingVisibility' | 'assertingValue',
+};
+export type CrxApplicationAttachParams = {
+  tabId: number,
+};
+export type CrxApplicationAttachOptions = {
+};
+export type CrxApplicationAttachResult = {
+  page: PageChannel,
+};
+export type CrxApplicationAttachAllParams = {
+  status?: 'loading' | 'complete',
+  lastFocusedWindow?: boolean,
+  windowId?: number,
+  windowType?: 'normal' | 'popup' | 'panel' | 'app' | 'devtools',
+  active?: boolean,
+  index?: number,
+  title?: string,
+  url?: string[],
+  currentWindow?: boolean,
+  highlighted?: boolean,
+  discarded?: boolean,
+  autoDiscardable?: boolean,
+  pinned?: boolean,
+  audible?: boolean,
+  muted?: boolean,
+  groupId?: number,
+};
+export type CrxApplicationAttachAllOptions = {
+  status?: 'loading' | 'complete',
+  lastFocusedWindow?: boolean,
+  windowId?: number,
+  windowType?: 'normal' | 'popup' | 'panel' | 'app' | 'devtools',
+  active?: boolean,
+  index?: number,
+  title?: string,
+  url?: string[],
+  currentWindow?: boolean,
+  highlighted?: boolean,
+  discarded?: boolean,
+  autoDiscardable?: boolean,
+  pinned?: boolean,
+  audible?: boolean,
+  muted?: boolean,
+  groupId?: number,
+};
+export type CrxApplicationAttachAllResult = {
+  pages: PageChannel[],
+};
+export type CrxApplicationDetachParams = {
+  tabId?: number,
+  page?: PageChannel,
+};
+export type CrxApplicationDetachOptions = {
+  tabId?: number,
+  page?: PageChannel,
+};
+export type CrxApplicationDetachResult = void;
+export type CrxApplicationDetachAllParams = {};
+export type CrxApplicationDetachAllOptions = {};
+export type CrxApplicationDetachAllResult = void;
+export type CrxApplicationNewPageParams = {
+  index?: number,
+  openerTabId?: number,
+  url?: string,
+  pinned?: boolean,
+  windowId?: number,
+  active?: boolean,
+  selected?: boolean,
+};
+export type CrxApplicationNewPageOptions = {
+  index?: number,
+  openerTabId?: number,
+  url?: string,
+  pinned?: boolean,
+  windowId?: number,
+  active?: boolean,
+  selected?: boolean,
+};
+export type CrxApplicationNewPageResult = {
+  page: PageChannel,
+};
+export type CrxApplicationShowRecorderParams = {
+  mode?: 'none' | 'recording' | 'inspecting',
+  language?: string,
+  testIdAttributeName?: string,
+  window?: {
+    type?: 'popup' | 'sidepanel',
+    url?: string,
+  },
+};
+export type CrxApplicationShowRecorderOptions = {
+  mode?: 'none' | 'recording' | 'inspecting',
+  language?: string,
+  testIdAttributeName?: string,
+  window?: {
+    type?: 'popup' | 'sidepanel',
+    url?: string,
+  },
+};
+export type CrxApplicationShowRecorderResult = void;
+export type CrxApplicationHideRecorderParams = {};
+export type CrxApplicationHideRecorderOptions = {};
+export type CrxApplicationHideRecorderResult = void;
+export type CrxApplicationSetModeParams = {
+  mode: Mode
+};
+export type CrxApplicationSetModeOptions = {
+  mode: Mode
+};
+export type CrxApplicationSetModeResult = void;
+export type CrxApplicationCloseParams = {};
+export type CrxApplicationCloseOptions = {};
+export type CrxApplicationCloseResult = void;
+export interface CrxApplicationEvents {
+  'hide': CrxApplicationHideEvent;
+  'show': CrxApplicationShowEvent;
+  'attached': CrxApplicationAttachedEvent;
+  'detached': CrxApplicationDetachedEvent;
+  'modeChanged': CrxApplicationModeChangedEvent;
+}
+            ```
+
+            validator.ts
+            Content:
+            ```
+File: src/protocol/validator.ts
+
+import 'playwright-core/lib/protocol/validator';
+import { scheme, tArray, tBoolean, tChannel, tEnum, tNumber, tObject, tOptional, tString } from 'playwright-core/lib/protocol/validatorPrimitives';
+scheme.PlaywrightInitializer = tObject({
+  chromium: tChannel(['BrowserType']),
+  firefox: tChannel(['BrowserType']),
+  webkit: tChannel(['BrowserType']),
+  bidiChromium: tChannel(['BrowserType']),
+  bidiFirefox: tChannel(['BrowserType']),
+  android: tChannel(['Android']),
+  electron: tChannel(['Electron']),
+  utils: tOptional(tChannel(['LocalUtils'])),
+  selectors: tChannel(['Selectors']),
+  preLaunchedBrowser: tOptional(tChannel(['Browser'])),
+  preConnectedAndroidDevice: tOptional(tChannel(['AndroidDevice'])),
+  socksSupport: tOptional(tChannel(['SocksSupport'])),
+  _crx: tChannel(['Crx']),
+});
+scheme.CrxInitializer = tOptional(tObject({}));
+scheme.CrxStartParams = tObject({
+  slowMo: tOptional(tNumber),
+});
+scheme.CrxStartResult = tObject({
+  crxApplication: tChannel(['CrxApplication']),
+});
+scheme.CrxApplicationInitializer = tObject({
+  context: tChannel(['BrowserContext']),
+});
+scheme.CrxApplicationHideEvent = tOptional(tObject({}));
+scheme.CrxApplicationShowEvent = tOptional(tObject({}));
+scheme.CrxApplicationAttachedEvent = tObject({
+  page: tChannel(['Page']),
+  tabId: tNumber,
+});
+scheme.CrxApplicationDetachedEvent = tObject({
+  tabId: tNumber,
+});
+scheme.CrxApplicationModeChangedEvent = tObject({
+  mode: tEnum(['none', 'recording', 'inspecting', 'assertingText', 'recording-inspecting', 'standby', 'assertingVisibility', 'assertingValue']),
+});
+scheme.CrxApplicationAttachParams = tObject({
+  tabId: tNumber,
+});
+scheme.CrxApplicationAttachResult = tObject({
+  page: tChannel(['Page']),
+});
+scheme.CrxApplicationAttachAllParams = tObject({
+  status: tOptional(tEnum(['loading', 'complete'])),
+  lastFocusedWindow: tOptional(tBoolean),
+  windowId: tOptional(tNumber),
+  windowType: tOptional(tEnum(['normal', 'popup', 'panel', 'app', 'devtools'])),
+  active: tOptional(tBoolean),
+  index: tOptional(tNumber),
+  title: tOptional(tString),
+  url: tOptional(tArray(tString)),
+  currentWindow: tOptional(tBoolean),
+  highlighted: tOptional(tBoolean),
+  discarded: tOptional(tBoolean),
+  autoDiscardable: tOptional(tBoolean),
+  pinned: tOptional(tBoolean),
+  audible: tOptional(tBoolean),
+  muted: tOptional(tBoolean),
+  groupId: tOptional(tNumber),
+});
+scheme.CrxApplicationAttachAllResult = tObject({
+  pages: tArray(tChannel(['Page'])),
+});
+scheme.CrxApplicationDetachParams = tObject({
+  tabId: tOptional(tNumber),
+  page: tOptional(tChannel(['Page'])),
+});
+scheme.CrxApplicationDetachResult = tOptional(tObject({}));
+scheme.CrxApplicationDetachAllParams = tOptional(tObject({}));
+scheme.CrxApplicationDetachAllResult = tOptional(tObject({}));
+scheme.CrxApplicationNewPageParams = tObject({
+  index: tOptional(tNumber),
+  openerTabId: tOptional(tNumber),
+  url: tOptional(tString),
+  pinned: tOptional(tBoolean),
+  windowId: tOptional(tNumber),
+  active: tOptional(tBoolean),
+  selected: tOptional(tBoolean),
+});
+scheme.CrxApplicationNewPageResult = tObject({
+  page: tChannel(['Page']),
+});
+scheme.CrxApplicationShowRecorderParams = tObject({
+  mode: tOptional(tEnum(['none', 'recording', 'inspecting', 'assertingText', 'recording-inspecting', 'standby', 'assertingVisibility', 'assertingValue'])),
+  language: tOptional(tString),
+  testIdAttributeName: tOptional(tString),
+  window: tOptional(tObject({
+    type: tOptional(tEnum(['popup', 'sidepanel'])),
+    url: tOptional(tString),
+  })),
+});
+scheme.CrxApplicationShowRecorderResult = tOptional(tObject({}));
+scheme.CrxApplicationHideRecorderParams = tOptional(tObject({}));
+scheme.CrxApplicationHideRecorderResult = tOptional(tObject({}));
+scheme.CrxApplicationSetModeParams = tObject({
+  mode: tEnum(['none', 'recording', 'inspecting', 'assertingText', 'recording-inspecting', 'standby', 'assertingVisibility', 'assertingValue']),
+});
+scheme.CrxApplicationSetModeResult = tOptional(tObject({}));
+scheme.CrxApplicationCloseParams = tOptional(tObject({}));
+scheme.CrxApplicationCloseResult = tOptional(tObject({}));
+            ```
+
+        shims/
+            .DS_Store
+            Error reading file: 'utf-8' codec can't decode byte 0x9e in position 312: invalid start byte
+
+            module.ts
+            Content:
+            ```
+File: src/shims/module.ts
+
+export default {
+  builtinModules: [],
+};
+            ```
+
+            async_hooks.ts
+            Content:
+            ```
+File: src/shims/async_hooks.ts
+
+export class AsyncLocalStorage<T extends { type: string; previous?: T }> {
+  lastZoneId = 0;
+  private _zones = new Map<number, T>();
+  private _current: T | undefined;
+  constructor() {}
+  getStore() {
+    return this._current;
+  }
+  run<R>(store: T, func: () => R): R  {
+    let id: number | undefined;
+    if (store) {
+      id = this.lastZoneId++;
+      this._zones.set(id, store);
+      this._current = store;
+      Object.defineProperty(func, 'name', { value: `__PWZONE__[${id}]-${store.type}` });
+    }
+    return runWithFinally(() => func(), () => {
+      if (id) this._zones.delete(id);
+      if (store) this._current = store.previous;
+    });
+  }
+}
+function runWithFinally<R>(func: () => R, finallyFunc: Function): R {
+  try {
+    const result = func();
+    if (result instanceof Promise) {
+      return result.then(r => {
+        finallyFunc();
+        return r;
+      }).catch(e => {
+        finallyFunc();
+        throw e;
+      }) as any;
+    }
+    finallyFunc();
+    return result;
+  } catch (e) {
+    finallyFunc();
+    throw e;
+  }
+}
+            ```
+
+            process.ts
+            Content:
+            ```
+File: src/shims/process.ts
+
+import process from 'process/browser';
+process.hrtime = (previousTimestamp?: [number, number]): [number, number] => {
+  const baseNow = Math.floor((Date.now() - performance.now()) * 1e-3);
+  const clocktime = performance.now() * 1e-3;
+  let seconds = Math.floor(clocktime) + baseNow;
+  let nanoseconds = Math.floor((clocktime % 1) * 1e9);
+  if (previousTimestamp) {
+    seconds = seconds - previousTimestamp[0];
+    nanoseconds = nanoseconds - previousTimestamp[1];
+    if (nanoseconds < 0) {
+      seconds--;
+      nanoseconds += 1e9;
+    }
+  }
+  return [seconds, nanoseconds];
+};
+process.platform = 'linux';
+process.versions.node = '18.16';
+process.stdout = { isTTY: 'false' };
+process.geteuid = () => "";
+process.env['PLAYWRIGHT_BROWSERS_PATH'] = '.';
+self.process = process;
+            ```
+
+            buffer.ts
+            Content:
+            ```
+File: src/shims/buffer.ts
+
+import buffer from 'buffer';
+self.Buffer = buffer.Buffer;
+            ```
+
+            tls.ts
+            Content:
+            ```
+File: src/shims/tls.ts
+
+function noop() {}
+export const connect = noop;
+export const TLSSocket = noop;
+export default {
+  connect,
+  TLSSocket,
+};
+            ```
+
+            url.ts
+            Content:
+            ```
+File: src/shims/url.ts
+
+import _url from '_url';
+export function pathToFileURL(s: string) {
+  return s;
+}
+export * from '_url';
+const url = { ..._url, pathToFileURL };
+export default url;
+            ```
+
+            child_process.ts
+            Content:
+            ```
+File: src/shims/child_process.ts
+
+function noop() {}
+export const spawn = noop;
+export const spawnSync = noop;
+export const execSync = noop;
+export default {
+  spawn,
+  spawnSync,
+  execSync,
+};
+            ```
+
+            net.ts
+            Content:
+            ```
+File: src/shims/net.ts
+
+function noop() {}
+export const createConnection = noop;
+export const isIP = noop;
+export default {
+  createConnection,
+  isIP,
+};
+            ```
+
+            global.ts
+            Content:
+            ```
+File: src/shims/global.ts
+
+import './process';
+import './setImmediate';
+import './buffer';
+import { fs } from 'memfs';
+fs.mkdirSync('/tmp');
+fs.mkdirSync('/crx');
+self.global = self;
+self.__dirname = '/crx';
+            ```
+
+            chokidar.ts
+            Content:
+            ```
+File: src/shims/chokidar.ts
+
+function noop() {}
+export default {
+  watch: noop,
+};
+            ```
+
+            dns.ts
+            Content:
+            ```
+File: src/shims/dns.ts
+
+function noop() {}
+export const promises = {
+  lookup: noop()
+};
+            ```
+
+            setImmediate.ts
+            Content:
+            ```
+File: src/shims/setImmediate.ts
+
+import 'setimmediate';
+self.setImmediate = setImmediate;
+            ```
+
+            readline.ts
+            Content:
+            ```
+File: src/shims/readline.ts
+
+function noop() {}
+export const createInterface = noop;
+export default {
+  createInterface,
+};
+            ```
+
+            util/
+                index.ts
+                Content:
+                ```
+File: src/shims/util/index.ts
+
+import _util, { promisify as promisify } from '_util';
+export const promisify = function(first, ...rest) {
+  if (first !== 'function') return Promise.resolve();
+  return _promisify(first, ...rest);
+};
+export * from '_util';
+const util = { ..._util, promisify };
+export default util;
+                ```
+
+            fs/
+                promises.ts
+                Content:
+                ```
+File: src/shims/fs/promises.ts
+
+import { promises } from "./index";
+export const {
+  access,
+  copyFile,
+  cp,
+  open,
+  opendir,
+  rename,
+  truncate,
+  rm,
+  rmdir,
+  mkdir,
+  readdir,
+  readlink,
+  symlink,
+  lstat,
+  stat,
+  statfs,
+  link,
+  unlink,
+  chmod,
+  lchmod,
+  lchown,
+  chown,
+  utimes,
+  lutimes,
+  realpath,
+  mkdtemp,
+  writeFile,
+  appendFile,
+  readFile,
+  watch,
+  constants,
+} = promises;
+export default promises;
+                ```
+
+                index.ts
+                Content:
+                ```
+File: src/shims/fs/index.ts
+
+import { fs } from 'memfs';
+export const {
+  appendFile,
+  appendFileSync,
+  access,
+  accessSync,
+  chown,
+  chownSync,
+  chmod,
+  chmodSync,
+  close,
+  closeSync,
+  copyFile,
+  copyFileSync,
+  cp,
+  cpSync,
+  createReadStream,
+  createWriteStream,
+  exists,
+  existsSync,
+  fchown,
+  fchownSync,
+  fchmod,
+  fchmodSync,
+  fdatasync,
+  fdatasyncSync,
+  fstat,
+  fstatSync,
+  fsync,
+  fsyncSync,
+  ftruncate,
+  ftruncateSync,
+  futimes,
+  futimesSync,
+  lchown,
+  lchownSync,
+  lchmod,
+  lchmodSync,
+  link,
+  linkSync,
+  lstat,
+  lstatSync,
+  lutimes,
+  lutimesSync,
+  mkdir,
+  mkdirSync,
+  mkdtemp,
+  mkdtempSync,
+  open,
+  openSync,
+  opendir,
+  opendirSync,
+  readdir,
+  readdirSync,
+  read,
+  readSync,
+  readv,
+  readvSync,
+  readFile,
+  readFileSync,
+  readlink,
+  readlinkSync,
+  realpath,
+  realpathSync,
+  rename,
+  renameSync,
+  rm,
+  rmSync,
+  rmdir,
+  rmdirSync,
+  stat,
+  statfs,
+  statSync,
+  statfsSync,
+  symlink,
+  symlinkSync,
+  truncate,
+  truncateSync,
+  unwatchFile,
+  unlink,
+  unlinkSync,
+  utimes,
+  utimesSync,
+  watch,
+  watchFile,
+  writeFile,
+  writeFileSync,
+  write,
+  writeSync,
+  writev,
+  writevSync,
+  Dirent,
+  Stats,
+  ReadStream,
+  WriteStream,
+  constants,
+  promises,
+} = fs;
+export default fs;
+                ```
+
+        client/
+            crx.ts
+            Content:
+            ```
+File: src/client/crx.ts
+
+import { EventEmitter } from 'events';
+import { ChannelOwner } from 'playwright-core/lib/client/channelOwner';
+import type * as api from '../types/types';
+import type * as channels from '../protocol/channels';
+import { Page } from 'playwright-core/lib/client/page';
+import type { BrowserContext } from 'playwright-core/lib/client/browserContext';
+import { Mode } from '@recorder/recorderTypes';
+function from<T>(obj: any): T {
+  return obj._object as T;
+}
+export class Crx extends ChannelOwner<channels.CrxChannel> implements api.Crx {
+  private _crxApplication?: CrxApplication;
+  static from(crx: channels.CrxChannel): Crx {
+    return (crx as any)._object;
+  }
+  async start(options?: channels.CrxStartOptions) {
+    if (!this._crxApplication) {
+      this._crxApplication = from<CrxApplication>((await this._channel.start(options ?? {})).crxApplication);
+      this._crxApplication.on('close', () => {
+        this._crxApplication = undefined;
+      });
+    }
+    return this._crxApplication;
+  }
+}
+export class CrxRecorder extends EventEmitter {
+  private _channel: channels.CrxApplicationChannel;
+  private _hidden: boolean = true;
+  private _mode: Mode = 'none';
+  constructor(channel: channels.CrxApplicationChannel) {
+    super();
+    this._channel = channel;
+    this._channel.on('hide', () => {
+      this._hidden = true;
+      this.emit('hide');
+    });
+    this._channel.on('show', () => {
+      this._hidden = false;
+      this.emit('show');
+    });
+    this._channel.on('modeChanged', event => {
+      this._mode = event.mode;
+      this.emit('modechanged', event);
+    });
+  }
+  get mode() {
+    return this._mode;
+  }
+  isHidden() {
+    return this._hidden;
+  }
+  async setMode(mode: Mode) {
+    await this._channel.setMode({ mode });
+  }
+  async show(options?: channels.CrxApplicationShowRecorderOptions) {
+    await this._channel.showRecorder(options ?? {});
+  }
+  async hide() {
+    await this._channel.hideRecorder();
+  }
+}
+export class CrxApplication extends ChannelOwner<channels.CrxApplicationChannel> implements api.CrxApplication {
+  private _context: BrowserContext;
+  readonly recorder: api.CrxRecorder;
+  static from(crxApplication: channels.CrxApplicationChannel): CrxApplication {
+    return (crxApplication as any)._object;
+  }
+  constructor(parent: ChannelOwner, type: string, guid: string, initializer: channels.CrxApplicationInitializer) {
+    super(parent, type, guid, initializer);
+    this._context = (initializer.context as any)._object;
+    this.recorder = new CrxRecorder(this._channel);
+    this._channel.on('attached', ({ page, tabId }) => {
+      this.emit('attached', { tabId, page: Page.from(page) });
+    });
+    this._channel.on('detached', ({ tabId }) => {
+      this.emit('detached', tabId);
+    });
+  }
+  context() {
+    return this._context;
+  }
+  pages(): api.Page[] {
+    return this._context.pages();
+  }
+  async attach(tabId: number) {
+    return from<Page>((await this._channel.attach({ tabId })).page);
+  }
+  async attachAll(options?: channels.CrxApplicationAttachAllOptions) {
+    const { url: urlOrUrls, ...remaining } = options ?? {};
+    const url = urlOrUrls ? typeof urlOrUrls === 'string' ? [urlOrUrls] : urlOrUrls : undefined;
+    const params = { ...remaining, url };
+    return (await this._channel.attachAll(params)).pages.map(p => from<Page>(p));
+  }
+  async detach(tabIdOrPage: number | Page): Promise<void> {
+    const params = typeof tabIdOrPage === 'number' ?
+      { tabId: tabIdOrPage } :
+      { page: tabIdOrPage._channel };
+    await this._channel.detach(params);
+  }
+  async detachAll(): Promise<void> {
+    await this._channel.detachAll();
+  }
+  async newPage(options?: channels.CrxApplicationNewPageOptions) {
+    return from<Page>((await this._channel.newPage(options ?? {})).page);
+  }
+  async close() {
+    await this._channel.close().catch(() => {});
+    this.emit('close');
+  }
+}
+            ```
+
+            crxConnection.ts
+            Content:
+            ```
+File: src/client/crxConnection.ts
+
+import { Connection } from 'playwright-core/lib/client/connection';
+import { Crx, CrxApplication } from './crx';
+import { CrxPlaywright } from './crxPlaywright';
+import { findValidator } from 'playwright-core/lib/protocol/validatorPrimitives';
+export class CrxConnection extends Connection {
+  constructor() {
+    super(undefined, undefined);
+    this.useRawBuffers();
+  }
+  dispatch(message: object): void {
+    const { guid: parentGuid, method, params } = message as any;
+    if (method === '__create__') {
+      const { type, guid } = params;
+      let initializer = params.initializer;
+      const parent = this._objects.get(parentGuid)!;
+      const validator = findValidator(type, '', 'Initializer');
+      initializer = validator(initializer, '', { tChannelImpl: (this as any)._tChannelImplFromWire.bind(this), binary: 'buffer' });
+      switch (type) {
+        case 'Playwright':
+          new CrxPlaywright(parent, type, guid, initializer);
+          return;
+        case 'Crx':
+          new Crx(parent, type, guid, initializer);
+          return;
+        case 'CrxApplication':
+          new CrxApplication(parent, type, guid, initializer);
+          return;
+      }
+    }
+    return super.dispatch(message);
+  }
+}
+            ```
+
+            crxPlaywright.ts
+            Content:
+            ```
+File: src/client/crxPlaywright.ts
+
+import type * as channels from '../protocol/channels';
+import { ChannelOwner } from "playwright-core/lib/client/channelOwner";
+import { Playwright } from "playwright-core/lib/client/playwright";
+import { Crx } from './crx';
+export class CrxPlaywright extends Playwright {
+  readonly _crx: Crx;
+  constructor(parent: ChannelOwner, type: string, guid: string, initializer: channels.CrxPlaywrightInitializer) {
+    super(parent, type, guid, initializer);
+    this._crx = Crx.from(initializer._crx);
+  }
+}
+            ```
+
