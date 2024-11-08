@@ -1,18 +1,4 @@
-/**
- * Copyright (c) Rui Figueira.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+
 
 import { LogName, debugLogger } from 'playwright-core/lib/utils/debugLogger';
 import type { Protocol } from 'playwright-core/lib/server/chromium/protocol';
@@ -21,8 +7,6 @@ import type { ConnectionTransport, ProtocolRequest, ProtocolResponse } from 'pla
 
 type Tab = chrome.tabs.Tab;
 
-// mimics DebuggerSession on https://chromium-review.googlesource.com/c/chromium/src/+/5398119/12/chrome/common/extensions/api/debugger.json
-// TODO replace with proper type when available
 type DebuggerSession = chrome.debugger.Debuggee & { sessionId?: string };
 
 export class CrxTransport implements ConnectionTransport {
@@ -75,22 +59,13 @@ export class CrxTransport implements ConnectionTransport {
       } else if (message.method === 'Target.setAutoAttach') {
         const [, versionStr] = navigator.userAgent.match(/Chrome\/([0-9]+)./) ?? [];
 
-        // we need to exclude service workers, see:
-        // https://github.com/ruifigueira/playwright-crx/issues/1
-        // https://chromedevtools.github.io/devtools-protocol/tot/Target/#method-setAutoAttach
-        result = await this._send(debuggee, message.method, { ...message.params, filter: [
+       result = await this._send(debuggee, message.method, { ...message.params, filter: [
           { exclude: true, type: 'service_worker' },
-          // and these are the defaults:
-          // https://chromedevtools.github.io/devtools-protocol/tot/Target/#type-TargetFilter
           { exclude: true, type: 'browser' },
           { exclude: true, type: 'tab' },
-          // in versions prior to 126, this fallback doesn't work,
-          // but it is necessary for oopif frames to be discoverable in version 126 or greater
-          ...(versionStr && parseInt(versionStr) >= 126 ? [{}] : []),
+           ...(versionStr && parseInt(versionStr) >= 126 ? [{}] : []),
         ]});
       } else if (message.method === 'Target.getTargetInfo' && !debuggee.tabId) {
-        // most likely related with https://chromium-review.googlesource.com/c/chromium/src/+/2885888
-        // See CRBrowser.connect
         result = await Promise.resolve().then();
       } else if (message.method === 'Target.createTarget') {
         const { id: tabId } = await chrome.tabs.create({ url: 'about:blank' });
@@ -115,8 +90,6 @@ export class CrxTransport implements ConnectionTransport {
         // do nothing...
         result = await Promise.resolve().then();
       } else if (message.method === 'Emulation.setEmulatedMedia') {
-        // avoids crashing on chrome.debugger.detach
-        // see: https://github.com/ruifigueira/playwright-crx/issues/2
         result = await Promise.resolve().then();
       } else {
         result = await this._send(debuggee, message.method as keyof Protocol.CommandParameters, { ...message.params });
